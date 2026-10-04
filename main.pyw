@@ -353,11 +353,13 @@ class AboutWindow(tk.Toplevel):
         bar.pack(fill=tk.X)
         self._app._mk_btn(bar, "  VIEW ON GITHUB  ", self._open_repo,
                           C['btn_off']).pack(side=tk.LEFT)
-        self.check_btn = self._app._mk_btn(bar, "  CHECK FOR UPDATES  ",
-                                           self._check_updates, C['blue'])
-        self.check_btn.pack(side=tk.LEFT, padx=8)
-        self._msg = tk.Label(self, text="", font=FONT_UI, bg=C['bg'],
-                             fg=C['dim'], anchor=tk.W, padx=18)
+        store = updater.is_store_install()
+        if not store:
+            self.check_btn = self._app._mk_btn(bar, "  CHECK FOR UPDATES  ",
+                                               self._check_updates, C['blue'])
+            self.check_btn.pack(side=tk.LEFT, padx=8)
+        self._msg = tk.Label(self, text="Updates come through the Microsoft Store." if store else "",
+                             font=FONT_UI, bg=C['bg'], fg=C['dim'], anchor=tk.W, padx=18)
         self._msg.pack(fill=tk.X)
 
     def _build_changelog(self):
@@ -480,8 +482,8 @@ class LicenceWindow(tk.Toplevel):
         self._app = app
         self._poll = None                 # the pending "Sign in" request, if any
         self.title("RamBo licence")
-        self.geometry("540x330")
-        self.minsize(460, 300)
+        self.geometry("540x360")
+        self.minsize(460, 330)
         self.configure(bg=C['bg'])
         self.transient(app)
         try:
@@ -524,12 +526,14 @@ class LicenceWindow(tk.Toplevel):
                             "until then.", pady=(10, 4))
             else:
                 self._label(self._MESSAGES[st["state"]], fg=C['yellow'] if locked else C['text'], pady=(10, 4))
+            self._label("Full version: A$14.95 one-off (about US$9.99), up to 3 PCs, all future "
+                        "updates included.", fg=C['text'], pady=(6, 0))
             self._label("Bought RamBo? Sign in with your Sixth Day Studios account, or enter your "
                         "product code.", fg=C['dim'], pady=(6, 0))
             row = tk.Frame(self._body, bg=C['bg'])
             row.pack(anchor=tk.W, pady=(12, 6))
             self._app._mk_btn(row, "  SIGN IN  ", self._sign_in, C['green']).pack(side=tk.LEFT)
-            self._app._mk_btn(row, "  BUY RAMBO  ", lambda: webbrowser.open(licence.SITE),
+            self._app._mk_btn(row, "  BUY RAMBO · A$14.95  ", lambda: webbrowser.open(licence.SITE + "/rambo"),
                               C['btn_off']).pack(side=tk.LEFT, padx=8)
             code_row = tk.Frame(self._body, bg=C['bg'])
             code_row.pack(fill=tk.X, pady=(10, 0))

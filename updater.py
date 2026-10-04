@@ -20,6 +20,7 @@ clobber the working copy.
 Stdlib only (urllib/json/threading), deliberately: this module ships
 inside the PyInstaller bundle and must not add anything to requirements.txt.
 """
+import ctypes
 import json
 import os
 import re
@@ -94,9 +95,21 @@ def install_dir():
     return Path(sys.executable).resolve().parent
 
 
+def is_store_install():
+    """True when RamBo runs as its Microsoft Store (MSIX) package. The Store signs it and
+    delivers updates itself, so the GitHub self-updater must stay off (Store policy)."""
+    try:
+        length = ctypes.c_uint32(0)
+        # 15700 = APPMODEL_ERROR_NO_PACKAGE: an ordinary (non-packaged) install.
+        return ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), None) != 15700
+    except (AttributeError, OSError):
+        return False
+
+
 def is_enabled():
-    """True only for installed builds with the update check left switched on."""
-    if not getattr(sys, 'frozen', False):
+    """True only for installed builds with the update check left switched on
+    (never for the Store version, which the Store keeps up to date)."""
+    if not getattr(sys, 'frozen', False) or is_store_install():
         return False
     return bool(_load_settings().get('update_check', True))
 
@@ -201,6 +214,8 @@ def check_now():
     the user previously skipped, and it runs synchronously. The user asked, so
     answer — but call it off the UI thread, since it makes a network request.
     """
+    if is_store_install():
+        return None
     info = _fetch_latest()
     if info and info.url and _parse_version(info.version) > _parse_version(
             current_version()):

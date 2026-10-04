@@ -16,6 +16,10 @@ than tags that once existed.
   code. Up to 3 PCs per licence; free one up with "Deactivate this PC" or from Your apps.
 - Works offline: a licence is checked online at most once a day and lasts 60 days between
   checks. If the site has never been reachable, RamBo allows 14 days from first launch.
+- Distributed through the Microsoft Store (MSIX, signed by Microsoft). The Store version
+  turns the GitHub self-updater off (`updater.is_store_install()`); the Store delivers updates.
+- The licence window states the price (A$14.95 one-off, up to 3 PCs, all updates included)
+  and BUY opens sixthdaystudios.com/rambo.
 - New `licence.py` and a stdlib-only `ed25519.py` (licences are signed by the website and
   verified here). Tests: `python tools/test_licence.py`.
 
