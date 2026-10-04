@@ -43,6 +43,7 @@ except ImportError:
 
 from startup import scan_startup, set_enabled, StartupAccessError
 import updater
+import licence
 import sounds
 
 # Single source of truth for the version; the release scripts parse this.
@@ -462,6 +463,165 @@ class AboutWindow(tk.Toplevel):
         threading.Thread(target=_work, daemon=True).start()
 
 
+class LicenceWindow(tk.Toplevel):
+    """Trial / licence window: shows where this PC stands, and activates RamBo by
+    "Sign in" (approve at sixthdaystudios.com/link) or a product code. Network calls run
+    on worker threads; results come back to Tk through after()."""
+
+    _MESSAGES = {
+        "trial_over": "Your 14-day trial has ended. RamBo still scans and shows everything; "
+                      "activate it to kill, trim and manage startup again.",
+        "check_needed": "RamBo needs to check its licence online. Connect to the internet and "
+                        "reopen this window, or activate below.",
+    }
+
+    def __init__(self, app, locked=False):
+        super().__init__(app)
+        self._app = app
+        self._poll = None                 # the pending "Sign in" request, if any
+        self.title("RamBo licence")
+        self.geometry("540x330")
+        self.minsize(460, 300)
+        self.configure(bg=C['bg'])
+        self.transient(app)
+        try:
+            self.iconbitmap(_res("icon.ico"))
+        except Exception:
+            pass
+        dark_titlebar(self)
+        self._body = tk.Frame(self, bg=C['bg'], padx=20, pady=16)
+        self._body.pack(fill=tk.BOTH, expand=True)
+        self._draw(locked)
+        self.bind("<Escape>", lambda _: self.destroy())
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+
+    def _label(self, text, font=FONT_UI, fg=None, **pack):
+        """A wrapped text line in the window body."""
+        lbl = tk.Label(self._body, text=text, font=font, bg=C['bg'], fg=fg or C['text'],
+                       justify=tk.LEFT, anchor=tk.W, wraplength=490)
+        lbl.pack(fill=tk.X, **pack)
+        return lbl
+
+    def _draw(self, locked=False):
+        """(Re)draw for the current licence state."""
+        for w in self._body.winfo_children():
+            w.destroy()
+        st = licence.status()
+        tk.Label(self._body, text="RAMBO LICENCE", font=("Consolas", 16, "bold"),
+                 bg=C['bg'], fg=C['green']).pack(anchor=tk.W)
+        if st["state"] == "licensed":
+            self._label("RamBo is activated on this PC. Thanks for supporting it!", pady=(10, 4))
+            self._label("Manage your PCs (up to 3) at sixthdaystudios.com/apps.", fg=C['dim'])
+            row = tk.Frame(self._body, bg=C['bg'])
+            row.pack(anchor=tk.W, pady=14)
+            self._app._mk_btn(row, "  MY APPS ON THE WEBSITE  ",
+                              lambda: webbrowser.open(licence.SITE + "/apps"), C['btn_off']).pack(side=tk.LEFT)
+            self._app._mk_btn(row, "  DEACTIVATE THIS PC  ", self._deactivate, C['btn_off']).pack(side=tk.LEFT, padx=8)
+        else:
+            if st["state"] == "trial":
+                left = st["days_left"]
+                self._label(f"Free trial: {left} day{'s' if left != 1 else ''} left. Everything works "
+                            "until then.", pady=(10, 4))
+            else:
+                self._label(self._MESSAGES[st["state"]], fg=C['yellow'] if locked else C['text'], pady=(10, 4))
+            self._label("Bought RamBo? Sign in with your Sixth Day Studios account, or enter your "
+                        "product code.", fg=C['dim'], pady=(6, 0))
+            row = tk.Frame(self._body, bg=C['bg'])
+            row.pack(anchor=tk.W, pady=(12, 6))
+            self._app._mk_btn(row, "  SIGN IN  ", self._sign_in, C['green']).pack(side=tk.LEFT)
+            self._app._mk_btn(row, "  BUY RAMBO  ", lambda: webbrowser.open(licence.SITE),
+                              C['btn_off']).pack(side=tk.LEFT, padx=8)
+            code_row = tk.Frame(self._body, bg=C['bg'])
+            code_row.pack(fill=tk.X, pady=(10, 0))
+            self._code = tk.Entry(code_row, font=FONT_DATA, bg=C['row'], fg=C['text'],
+                                  insertbackground=C['text'], relief=tk.FLAT, width=30)
+            self._code.pack(side=tk.LEFT, ipady=6, padx=(0, 8))
+            self._code.insert(0, "RAMBO-")
+            self._code.bind("<Return>", lambda _: self._activate())
+            self._app._mk_btn(code_row, "  ACTIVATE CODE  ", self._activate, C['blue']).pack(side=tk.LEFT)
+        self._msg = self._label("", fg=C['dim'], pady=(12, 0))
+        self._big = self._label("", font=("Consolas", 22, "bold"), fg=C['green'])
+
+    def _say(self, text, colour=None):
+        """Status line under the buttons."""
+        if self.winfo_exists():
+            self._msg.config(text=text, fg=colour or C['dim'])
+
+    def _in_background(self, work, done):
+        """Run work() on a thread, then done(result) back on the Tk thread."""
+        def run():
+            result = work()
+            self._app.after(0, lambda: self.winfo_exists() and done(result))
+        threading.Thread(target=run, daemon=True).start()
+
+    def _finished(self, message):
+        """Activated: tell them, refresh the main window, close shortly after."""
+        self._poll = None
+        self._draw()
+        self._say(message, C['green'])
+        self._app._refresh_licence_ui()
+
+    def _activate(self):
+        """Redeem the typed product code."""
+        code = self._code.get().strip()
+        if len(code.replace("RAMBO-", "")) < 8:
+            self._say("Enter the product code from your purchase email or Your apps page.", C['yellow'])
+            return
+        self._say("Checking your code…")
+        self._in_background(lambda: licence.activate_code(code),
+                            lambda r: self._finished(r[1]) if r[0] else self._say(r[1], C['red']))
+
+    def _sign_in(self):
+        """Start "Sign in": show a short code to approve on the website, then poll for it."""
+        self._say("Getting a sign-in code…")
+
+        def started(r):
+            if r.get("error"):
+                self._say(r["error"], C['red'])
+                return
+            self._poll = r["poll"]
+            url = f"{r['url']}?code={r['user_code']}"
+            self._big.config(text=r["user_code"])
+            self._say(f"Approve this code at {r['url'].replace('https://', '')} (signed in to your "
+                      "Sixth Day Studios account). Your browser should open there now; this window "
+                      "finishes by itself.", C['text'])
+            webbrowser.open(url)
+            self._app.after(3000, self._check_link)
+        self._in_background(licence.link_start, started)
+
+    def _check_link(self):
+        """Poll the pending "Sign in" every few seconds until approved, refused or expired."""
+        poll = self._poll
+        if not poll or not self.winfo_exists():
+            return
+
+        def checked(r):
+            state, message = r
+            if state == "ok":
+                self._finished(message)
+            elif state == "error":
+                self._poll = None
+                self._big.config(text="")
+                self._say(message, C['red'])
+            else:
+                self._app.after(3000, self._check_link)
+        self._in_background(lambda: licence.link_poll(poll), checked)
+
+    def _deactivate(self):
+        """Free this PC's slot (moving RamBo to another PC)."""
+        if not messagebox.askyesno("Deactivate this PC?",
+                                   "RamBo will go back to trial rules on this PC, and the slot is freed "
+                                   "for another PC. Continue?", parent=self):
+            return
+        self._say("Deactivating…")
+
+        def done(r):
+            self._draw()
+            self._say(r[1], C['green'] if r[0] else C['red'])
+            self._app._refresh_licence_ui()
+        self._in_background(licence.deactivate, done)
+
+
 class FilterChip(tk.Label):
     """Click-to-toggle filter pill — replaces Tk's checkbox, which looks
     out of place on a dark surface."""
@@ -687,6 +847,11 @@ class RamBo(tk.Tk):
         dark_titlebar(self)
         updater.start_check()
         self.after(1200, self._poll_update)
+        # Licence: refresh / start the trial off the Tk thread, then show where we stand.
+        threading.Thread(target=licence.sync, daemon=True).start()
+        self._refresh_licence_ui()
+        self.after(4000, self._refresh_licence_ui)
+        self.after(15000, self._refresh_licence_ui)
         # Populate the list without waiting for a click. Deferred rather than
         # called inline so the window paints before the scan thread starts.
         self.after(200, self._start_scan)
@@ -837,11 +1002,47 @@ class RamBo(tk.Tk):
         self.update_btn = self._mk_btn(btns, "⬆  UPDATE", self._show_update,
                                        C['purple'])
 
+        # Trial / licence status; opens the licence window. Leftmost button.
+        self.licence_btn = self._mk_btn(btns, "…", self._show_licence, C['btn_off'])
+        self.licence_btn.pack(side=tk.RIGHT, padx=(6, 0))
+
         # Only offered when it would actually change anything.
         if not is_admin():
             self.elevate_btn = self._mk_btn(btns, "⛨  ADMIN", self._elevate,
                                             C['btn_off'])
             self.elevate_btn.pack(side=tk.RIGHT, padx=(6, 0))
+
+    # ── Licence ────────────────────────────────────────────────────────────────
+    def _refresh_licence_ui(self):
+        """Show the trial / licence state on the topbar button."""
+        st = licence.status()
+        if st["state"] == "licensed":
+            text, colour = "✓  LICENSED", C['btn_off']
+        elif st["state"] == "trial":
+            text, colour = f"TRIAL · {st['days_left']}D LEFT", C['btn_off']
+        else:
+            text, colour = "🔑  ACTIVATE", C['purple']
+        self.licence_btn.config(text=text)
+        self.licence_btn.set_accent(colour)
+        self._fit_topbar()
+
+    def _show_licence(self, locked=False):
+        """Open the licence window, or raise the open one."""
+        existing = getattr(self, '_licence_win', None)
+        if existing is not None and existing.winfo_exists():
+            existing.deiconify()
+            existing.lift()
+            existing.focus_force()
+            return
+        self._licence_win = LicenceWindow(self, locked)
+
+    def _need_licence(self):
+        """True (and the licence window opens) when the trial is over and there's no licence.
+        Guards every action that changes the system; scanning and viewing stay free."""
+        if licence.allowed():
+            return False
+        self._show_licence(locked=True)
+        return True
 
     # ── Self-update ────────────────────────────────────────────────────────────
     def _show_about(self):
@@ -1528,6 +1729,8 @@ class RamBo(tk.Tk):
                                       command=lambda cc=c: self._startup_sort(cc))
 
     def _set_startup_enabled(self, enable: bool):
+        if self._need_licence():
+            return
         # Snapshot entries on the main thread to avoid iid/results race
         entries = [self._startup_results[int(iid)]
                    for iid in self.startup_tree.selection()
@@ -2083,6 +2286,8 @@ class RamBo(tk.Tk):
 
     # ── Kill ───────────────────────────────────────────────────────────────────
     def _kill_selected(self):
+        if self._need_licence():
+            return
         sel = self.tree.selection()
         if not sel:
             return
@@ -2157,6 +2362,8 @@ class RamBo(tk.Tk):
             )
 
     def _kill_children(self):
+        if self._need_licence():
+            return
         sel = self.tree.selection()
         if not sel:
             return
@@ -2228,6 +2435,8 @@ class RamBo(tk.Tk):
             )
 
     def _trim_selected(self):
+        if self._need_licence():
+            return
         sel = self.tree.selection()
         if not sel:
             return
@@ -2238,6 +2447,8 @@ class RamBo(tk.Tk):
         self._update_ram()
 
     def _trim_all(self):
+        if self._need_licence():
+            return
         if self._trimming:
             return
         self._trimming = True

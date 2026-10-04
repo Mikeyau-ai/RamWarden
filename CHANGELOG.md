@@ -8,6 +8,17 @@ docs in `docs/superpowers/`. They were never cut as numbered builds — the alph
 ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
+## Unreleased (licensing; not published yet)
+- RamBo becomes a paid app from sixthdaystudios.com, with a 14-day free trial per PC
+  (reinstalling doesn't reset it). After the trial RamBo still scans and shows everything;
+  kill, trim and startup on/off ask for a licence.
+- Activate by "Sign in" (approve a short code at sixthdaystudios.com/link) or a product
+  code. Up to 3 PCs per licence; free one up with "Deactivate this PC" or from Your apps.
+- Works offline: a licence is checked online at most once a day and lasts 60 days between
+  checks. If the site has never been reachable, RamBo allows 14 days from first launch.
+- New `licence.py` and a stdlib-only `ed25519.py` (licences are signed by the website and
+  verified here). Tests: `python tools/test_licence.py`.
+
 ## 1.5.1
 - The announcer lines are tuned as a set rather than individually: the tone
   steps down from Double to Multi to Ultra and then lifts into Monster, so a
