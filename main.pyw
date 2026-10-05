@@ -60,7 +60,8 @@ C = {
     'text':     '#dcdcdc',
     'dim':      '#6b6b6b',
     'dimmer':   '#4a4a4a',
-    'green':    '#4caf50',
+    'teal':     '#2cc4a8',   # accent: Sixth Day Studios bright teal (the shield icon's colour)
+    'teal_btn': '#0f8f7a',   # accent buttons: the darker studio teal, so white text stays readable
     'red':      '#e05252',
     'yellow':   '#e0a040',
     'orange':   '#e07840',
@@ -338,7 +339,7 @@ class AboutWindow(tk.Toplevel):
         line = tk.Frame(head, bg=C['panel'])
         line.pack(anchor=tk.W)
         tk.Label(line, text="RAMWARDEN", font=("Consolas", 21, "bold"),
-                 bg=C['panel'], fg=C['green']).pack(side=tk.LEFT, anchor=tk.S)
+                 bg=C['panel'], fg=C['teal']).pack(side=tk.LEFT, anchor=tk.S)
         # Say plainly when this is a dev run: the updater is inert from source,
         # so "no updates" there means something different.
         suffix = "" if getattr(sys, 'frozen', False) else "   (running from source)"
@@ -376,7 +377,7 @@ class AboutWindow(tk.Toplevel):
         box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y, padx=(4, 0))
 
-        box.tag_configure("ver", foreground=C['green'],
+        box.tag_configure("ver", foreground=C['teal'],
                           font=("Consolas", 11, "bold"), spacing1=10, spacing3=4)
         box.tag_configure("body", spacing3=3, lmargin1=12, lmargin2=26)
         box.tag_configure("b", font=(FONT_UI[0], FONT_UI[1], "bold"))
@@ -510,7 +511,7 @@ class LicenceWindow(tk.Toplevel):
             w.destroy()
         st = licence.status()
         tk.Label(self._body, text="RAMWARDEN LICENCE", font=("Consolas", 16, "bold"),
-                 bg=C['bg'], fg=C['green']).pack(anchor=tk.W)
+                 bg=C['bg'], fg=C['teal']).pack(anchor=tk.W)
         if st["state"] == "licensed":
             self._label("RamWarden is activated on this PC. Thanks for supporting it!", pady=(10, 4))
             self._label("Manage your PCs (up to 3) at sixthdaystudios.com/apps.", fg=C['dim'])
@@ -532,7 +533,7 @@ class LicenceWindow(tk.Toplevel):
                         "product code.", fg=C['dim'], pady=(6, 0))
             row = tk.Frame(self._body, bg=C['bg'])
             row.pack(anchor=tk.W, pady=(12, 6))
-            self._app._mk_btn(row, "  SIGN IN  ", self._sign_in, C['green']).pack(side=tk.LEFT)
+            self._app._mk_btn(row, "  SIGN IN  ", self._sign_in, C['teal_btn']).pack(side=tk.LEFT)
             self._app._mk_btn(row, "  BUY RAMWARDEN · A$14.95  ", lambda: webbrowser.open(licence.SITE + "/ramwarden"),
                               C['btn_off']).pack(side=tk.LEFT, padx=8)
             code_row = tk.Frame(self._body, bg=C['bg'])
@@ -544,7 +545,7 @@ class LicenceWindow(tk.Toplevel):
             self._code.bind("<Return>", lambda _: self._activate())
             self._app._mk_btn(code_row, "  ACTIVATE CODE  ", self._activate, C['blue']).pack(side=tk.LEFT)
         self._msg = self._label("", fg=C['dim'], pady=(12, 0))
-        self._big = self._label("", font=("Consolas", 22, "bold"), fg=C['green'])
+        self._big = self._label("", font=("Consolas", 22, "bold"), fg=C['teal'])
 
     def _say(self, text, colour=None):
         """Status line under the buttons."""
@@ -562,7 +563,7 @@ class LicenceWindow(tk.Toplevel):
         """Activated: tell them, refresh the main window, close shortly after."""
         self._poll = None
         self._draw()
-        self._say(message, C['green'])
+        self._say(message, C['teal'])
         self._app._refresh_licence_ui()
 
     def _activate(self):
@@ -621,7 +622,7 @@ class LicenceWindow(tk.Toplevel):
 
         def done(r):
             self._draw()
-            self._say(r[1], C['green'] if r[0] else C['red'])
+            self._say(r[1], C['teal'] if r[0] else C['red'])
             self._app._refresh_licence_ui()
         self._in_background(licence.deactivate, done)
 
@@ -889,7 +890,7 @@ class RamWarden(tk.Tk):
                   foreground=[("selected", "#ffffff")])
         style.map("R.Treeview.Heading",
                   background=[("active", C['border'])],
-                  foreground=[("active", C['green'])])
+                  foreground=[("active", C['teal'])])
         # Minimal scrollbar: trough + thumb, no stepper arrows.
         style.layout("R.Vertical.TScrollbar", [
             ('Vertical.Scrollbar.trough', {'sticky': 'ns', 'children': [
@@ -914,7 +915,7 @@ class RamWarden(tk.Tk):
                         lightcolor=C['bg'], darkcolor=C['bg'])
         style.map("R.TNotebook.Tab",
                   background=[("selected", C['panel']), ("active", C['row_alt'])],
-                  foreground=[("selected", C['green']), ("active", C['text'])],
+                  foreground=[("selected", C['teal']), ("active", C['text'])],
                   lightcolor=[("selected", C['panel'])],
                   bordercolor=[("selected", C['panel'])],
                   darkcolor=[("selected", C['panel'])])
@@ -957,7 +958,7 @@ class RamWarden(tk.Tk):
         wordmark = tk.Frame(bar, bg=C['bg'])
         wordmark.pack(side=tk.LEFT)
         mark = tk.Label(wordmark, text="RAMWARDEN", font=("Consolas", 21, "bold"),
-                        bg=C['bg'], fg=C['green'])
+                        bg=C['bg'], fg=C['teal'])
         mark.pack(side=tk.LEFT, anchor=tk.S)
         tag = tk.Label(wordmark, text="  RAM & Process Manager", font=FONT_UI,
                        bg=C['bg'], fg=C['dim'])
@@ -999,7 +1000,7 @@ class RamWarden(tk.Tk):
         self.live_btn = self._mk_btn(btns, "◉  LIVE", self._live_toggle, C['btn_off'])
         self.live_btn.pack(side=tk.RIGHT, padx=(6, 0))
 
-        self.scan_btn = self._mk_btn(btns, "▶  SCAN", self._start_scan, C['green'])
+        self.scan_btn = self._mk_btn(btns, "▶  SCAN", self._start_scan, C['teal_btn'])
         self.scan_btn.pack(side=tk.RIGHT, padx=(6, 0))
 
         # Hidden until the background check finds a newer release.
@@ -1083,7 +1084,7 @@ class RamWarden(tk.Tk):
         and nothing tells the user it worked. Shown in the status bar rather
         than a dialog: it is confirmation, not a question."""
         self.status_var.set(f"✓  Updated to v{version}")
-        self.status_lbl.config(fg=C['green'])
+        self.status_lbl.config(fg=C['teal'])
         # Hand the status line back after a few seconds; a scan or a live tick
         # would otherwise be stuck behind a message about a finished update.
         self.after(6000, self._clear_update_notice)
@@ -1270,14 +1271,14 @@ class RamWarden(tk.Tk):
         self.search_var.trace_add("write", lambda *_: self._on_search_change())
         entry = tk.Entry(box, textvariable=self.search_var, width=24,
                          font=FONT_UI, bg=C['row'], fg=C['text'], bd=0,
-                         relief=tk.FLAT, insertbackground=C['green'],
+                         relief=tk.FLAT, insertbackground=C['teal'],
                          highlightthickness=0)
         entry.pack(side=tk.LEFT)
         entry.bind("<Escape>", lambda _: self.search_var.set(""))
         self.search_entry = entry
 
         # Focus ring: brighten the box border while the entry has focus.
-        entry.bind("<FocusIn>",  lambda _: box.config(highlightbackground=C['green']))
+        entry.bind("<FocusIn>",  lambda _: box.config(highlightbackground=C['teal']))
         entry.bind("<FocusOut>", lambda _: box.config(highlightbackground=C['border']))
 
         # Placeholder, drawn over the entry while it is empty and unfocused.
@@ -1583,7 +1584,7 @@ class RamWarden(tk.Tk):
         toolbar.pack(fill=tk.X)
 
         self.startup_scan_btn = self._mk_btn(
-            toolbar, "▶  SCAN STARTUP", self._start_startup_scan, C['green'])
+            toolbar, "▶  SCAN STARTUP", self._start_startup_scan, C['teal_btn'])
         self.startup_scan_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         self.startup_disable_btn = self._mk_btn(
@@ -1783,7 +1784,7 @@ class RamWarden(tk.Tk):
 
         self.status_var  = tk.StringVar(value="Ready — press SCAN to begin")
         self.summary_var = tk.StringVar(value="")
-        # Kept as an attribute so _announce_update can tint it green.
+        # Kept as an attribute so _announce_update can tint it teal.
         self.status_lbl = tk.Label(bar, textvariable=self.status_var,
                                    bg=C['panel'], fg=C['dim'], font=FONT_UI)
         self.status_lbl.pack(side=tk.LEFT)
@@ -1804,7 +1805,7 @@ class RamWarden(tk.Tk):
         self.ram_label.pack(side=tk.LEFT, padx=(8, 0))
 
         tk.Label(bar, textvariable=self.summary_var,
-                 bg=C['panel'], fg=C['green'], font=FONT_UI_BOLD
+                 bg=C['panel'], fg=C['teal'], font=FONT_UI_BOLD
                  ).pack(side=tk.RIGHT, padx=(0, 24))
 
         self._update_ram()
@@ -1834,7 +1835,7 @@ class RamWarden(tk.Tk):
         used_gb  = mem.used  / 1024 ** 3
         total_gb = mem.total / 1024 ** 3
         pct      = mem.percent
-        color    = C['green'] if pct < 60 else (C['yellow'] if pct < 85 else C['red'])
+        color    = C['teal'] if pct < 60 else (C['yellow'] if pct < 85 else C['red'])
         for item in self.ram_fill_ids:
             self.ram_canvas.delete(item)
         self.ram_fill_ids = self._rounded_bar(
@@ -2002,7 +2003,7 @@ class RamWarden(tk.Tk):
         self._live = not self._live
         if self._live:
             self.live_btn.config(text="●  LIVE")
-            self.live_btn.set_accent(C['green'])
+            self.live_btn.set_accent(C['teal_btn'])
             self._schedule_live()
         else:
             self.live_btn.config(text="◉  LIVE")
