@@ -1,153 +1,115 @@
 """
-Generate icon.ico and logo.png for RamBo.
+Generate RamWarden's icon and artwork from one vector drawing.
 
-Design: Rambo in profile — head-and-shoulders silhouette on a dark plate, red
-headband with two tails streaming back, and a green rim light that matches the
-app's accent colour.
+Design (Mikey, 2026-10-05): a warden's shield guarding a RAM stick, in the Sixth Day Studios
+bright teal (#2CC4A8) on a dark rounded tile. Flat for the icon; the glow version is only for
+marketing (website hero, Store banner), where there's room for it.
 
-Everything is drawn at 4x supersample and downsampled with LANCZOS; drawing
-straight at 16/32px gives jagged edges, drawing large and resizing does not.
+Writes:
+  icon.ico           16-256 px (Windows window/taskbar/installer icon)
+  logo.png           40 px shield without the tile (the app's top bar is already dark)
+  icon_preview.png   256 px tile (README, Store package tiles)
+  brand/             wordmark (flat + glow) and the Store hero banner
+
+Sizes of 32 px and below use a simpler drawing (thicker shield, fewer chip details), because
+fine detail turns to mush at taskbar size.
+
+Run: python make_icon.py      (needs: python -m pip install resvg-py pillow; Montserrat installed)
 """
-import os
-from PIL import Image, ImageDraw, ImageFilter, ImageChops
+import io
+import pathlib
 
-SS = 4
-S = 256 * SS            # working canvas edge
-K = S / 1024.0          # geometry below is authored in a 1024 space
+import resvg_py
+from PIL import Image
 
-RED = '#c8322f'
-RED_LT = '#ef5350'
-GREEN = '#4caf50'
+HERE = pathlib.Path(__file__).resolve().parent
+TEAL, BG, BG2 = "#2CC4A8", "#141414", "#24282b"
+FONTS = [r"C:\Windows\Fonts\Montserrat-Bold.otf"]
 
-# Profile facing left. The brow, nose, lips and chin are what make this read as
-# a face at a glance, so those are the points carrying the detail.
-PROFILE = [
-    (520, 158), (430, 190), (382, 250), (360, 320), (346, 354),
-    (378, 378), (368, 400), (318, 462), (372, 484), (360, 504),
-    (376, 520), (358, 542), (376, 562), (368, 596), (442, 638),
-    (534, 660),                            # jaw angle
-    (516, 690), (500, 762), (452, 800),    # neck front
-    (318, 836), (176, 918), (106, 1040), (932, 1040), (930, 906),
-    (826, 816), (690, 776),                # trapezius / shoulder back
-    (642, 706), (704, 662), (752, 556), (764, 424), (744, 296),
-    (700, 208), (620, 164),                # back of hair
-]
+# The shield, on a 512 grid, filling most of the tile.
+SHIELD = ("M256 46 C306 72 370 86 428 86 L428 238 C428 356 356 436 256 482 "
+          "C156 436 84 356 84 238 L84 86 C142 86 206 72 256 46 Z")
 
 
-def hx(h):
-    """'#rrggbb' -> (r, g, b)."""
-    h = h.lstrip('#')
-    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+def stick(detail=True):
+    """The RAM stick, tilted like Mikey's design: a teal board and pins, with the chip windows and
+    key notch CUT OUT (a mask), so whatever is behind shows through: the dark tile in the icon, the
+    page itself in the light-mode wordmark."""
+    chips = (-96, -48, 0, 48) if detail else (-80, 16)
+    w = 36 if detail else 58
+    holes = "".join(f'<rect x="{x}" y="-24" width="{w}" height="30" rx="4" fill="black"/>' for x in chips)
+    pins = ("".join(f'<rect x="{x}" y="26" width="7" height="18" fill="{TEAL}"/>' for x in range(-108, 116, 14))
+            if detail else "")
+    notch = '<rect x="-10" y="18" width="16" height="26" fill="black"/>' if detail else ""
+    board_h = 70 if detail else 76
+    return (f'<g transform="translate(266 250) rotate(-35) scale(1.12)">'
+            f'<mask id="rwcut" maskUnits="userSpaceOnUse" x="-140" y="-60" width="280" height="130">'
+            f'<rect x="-140" y="-60" width="280" height="130" fill="white"/>{holes}{notch}</mask>'
+            f'<g mask="url(#rwcut)"><rect x="-124" y="-42" width="248" height="{board_h}" rx="10" fill="{TEAL}"/>'
+            f'{pins}</g></g>')
 
 
-def lerp(a, b, t):
-    return a + (b - a) * t
+def mark(detail=True):
+    """The shield and stick (no tile)."""
+    stroke = 34 if detail else 50
+    return (f'<path d="{SHIELD}" fill="none" stroke="{TEAL}" stroke-width="{stroke}" stroke-linejoin="round"/>'
+            + stick(detail))
 
 
-def vgrad(w, h, c1, c2):
-    """Vertical two-stop gradient as an RGB image."""
-    col = Image.new('RGB', (1, h))
-    d = ImageDraw.Draw(col)
-    a, b = hx(c1), hx(c2)
-    for y in range(h):
-        t = y / max(1, h - 1)
-        d.point((0, y), fill=tuple(int(lerp(a[i], b[i], t)) for i in range(3)))
-    return col.resize((w, h), Image.BILINEAR)
+def tile(detail=True):
+    """The app icon: the mark on a dark rounded tile."""
+    return (f'<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{BG2}"/>'
+            f'<stop offset="1" stop-color="{BG}"/></linearGradient></defs>'
+            f'<rect width="512" height="512" rx="112" fill="url(#bg)"/>'
+            f'<g transform="translate(256 256) scale(0.84) translate(-256 -256)">{mark(detail)}</g>')
 
 
-def P(pts):
-    """Scale a 1024-space point list into canvas space."""
-    return [(x * K, y * K) for x, y in pts]
+GLOW = ('<defs><filter id="g" x="-20%" y="-20%" width="140%" height="140%">'
+        '<feGaussianBlur stdDeviation="12" result="b"/><feMerge><feMergeNode in="b"/>'
+        '<feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>')
 
 
-def blank_mask():
-    m = Image.new('L', (S, S), 0)
-    return m, ImageDraw.Draw(m)
+def wordmark(glow=False):
+    """The shield above stacked "RAM / WARDEN" lettering, flat or glowing (600 x 760 units)."""
+    text = (f'<g fill="{TEAL}" font-family="Montserrat" font-weight="700" text-anchor="middle">'
+            f'<text x="300" y="640" font-size="150" letter-spacing="6">RAM</text>'
+            f'<text x="300" y="740" font-size="96" letter-spacing="6">WARDEN</text></g>')
+    body = f'<g transform="translate(44 0)">{mark(True)}</g>{text}'
+    return f'{GLOW}<g filter="url(#g)">{body}</g>' if glow else body
 
 
-def plate():
-    """Dark rounded-square base plate and its mask."""
-    r = int(S * 0.185)
-    mask = Image.new('L', (S, S), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, S - 1, S - 1], radius=r, fill=255)
-    img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-    img.paste(vgrad(S, S, '#2b2b2b', '#0b0b0b'), (0, 0), mask)
-    return img, mask
-
-
-def vignette(img, strength=90):
-    """Darken the corners so the subject sits forward off the plate."""
-    v = Image.new('L', (S, S), 0)
-    ImageDraw.Draw(v).ellipse([-S * 0.30, -S * 0.30, S * 1.30, S * 1.30], fill=255)
-    v = v.filter(ImageFilter.GaussianBlur(S * 0.10))
-    shade = Image.new('RGBA', (S, S), (0, 0, 0, strength))
-    shade.putalpha(ImageChops.multiply(shade.getchannel('A'), ImageChops.invert(v)))
-    img.alpha_composite(shade)
-
-
-def rim(img, mask, colour, dx=-15, dy=-10):
-    """Offset copy of the silhouette in the accent colour — a rim light."""
-    shifted = mask.transform(mask.size, Image.AFFINE,
-                             (1, 0, -dx * K, 0, 1, -dy * K))
-    img.paste(Image.new('RGB', (S, S), hx(colour)), (0, 0), shifted)
-
-
-def headband():
-    """(wrap, tails) — the brow wrap, and two tails streaming off the back."""
-    wrap, wd = blank_mask()
-    wd.polygon(P([(330, 306), (770, 276), (776, 344), (338, 372)]), fill=255)
-    tails, td = blank_mask()
-    td.polygon(P([(730, 284), (906, 236), (948, 288), (844, 322), (738, 336)]), fill=255)
-    td.polygon(P([(736, 328), (896, 380), (920, 452), (832, 416), (742, 368)]), fill=255)
-    return wrap, tails
-
-
-def draw_icon():
-    """Render the full-size (1024px) master artwork."""
-    img, pmask = plate()
-    vignette(img)
-
-    fig, d = blank_mask()
-    d.polygon(P(PROFILE), fill=255)
-
-    rim(img, fig, GREEN)
-    img.paste(vgrad(S, S, '#191919', '#060606'), (0, 0), fig)
-
-    # The wrap is clipped to the skull; the tails fly free beyond it.
-    wrap, tails = headband()
-    band = ImageChops.lighter(
-        ImageChops.darker(wrap, fig.filter(ImageFilter.MaxFilter(9))), tails)
-    img.paste(vgrad(S, S, RED_LT, RED), (0, 0), band)
-
-    # Clip to the plate, then a hairline edge highlight for depth.
-    img.putalpha(ImageChops.darker(img.getchannel('A'), pmask))
-    ring = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-    w = max(2, S // 170)
-    ImageDraw.Draw(ring).rounded_rectangle(
-        [w // 2, w // 2, S - 1 - w // 2, S - 1 - w // 2],
-        radius=int(S * 0.185), outline=(255, 255, 255, 38), width=w)
-    img.alpha_composite(ring)
-    return img
+def render(body, w, h=None, view=(0, 0, 512, 512)):
+    """An SVG body as a PIL image."""
+    h = h or w
+    doc = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{" ".join(map(str, view))}" '
+           f'width="{w}" height="{h}">{body}</svg>')
+    data = resvg_py.svg_to_bytes(svg_string=doc, width=w, height=h, font_files=FONTS)
+    return Image.open(io.BytesIO(bytes(data))).convert("RGBA")
 
 
 def main():
-    here = os.path.dirname(os.path.abspath(__file__))
-    master = draw_icon()
+    """Write the icon set and the brand artwork."""
+    sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
+    frames = {s: render(tile(detail=s > 32), s) for s in sizes}
+    # Each size drawn on its own (not downscaled), so the small ones keep their simpler drawing.
+    frames[256].save(HERE / "icon.ico", format="ICO", sizes=[(s, s) for s in sizes],
+                     append_images=[frames[s] for s in sizes if s != 256])
+    render(mark(detail=True), 40).save(HERE / "logo.png")
+    frames[256].save(HERE / "icon_preview.png")
 
-    # Resize each ICO frame ourselves — Pillow's internal ICO downscaling is
-    # lower quality than an explicit LANCZOS pass per size.
-    sizes = [256, 128, 64, 48, 32, 16]
-    frames = [master.resize((n, n), Image.LANCZOS) for n in sizes]
-    frames[0].save(os.path.join(here, 'icon.ico'), format='ICO',
-                   sizes=[(n, n) for n in sizes],
-                   append_images=frames[1:])
+    brand = HERE / "brand"
+    brand.mkdir(exist_ok=True)
+    for s in (16, 24, 32, 48):                              # the small drawings, for checking by eye
+        frames[s].save(brand / f"icon-{s}.png")
+    render(tile(), 1024).save(brand / "icon-1024.png")
+    render(wordmark(False), 600, 760, (0, 0, 600, 760)).save(brand / "wordmark.png")
+    render(wordmark(True), 600, 760, (0, 0, 600, 760)).save(brand / "wordmark-glow.png")
+    # Store hero / banner art (16:9): the glowing wordmark on dark.
+    banner = (f'<rect width="1920" height="1080" fill="{BG}"/>'
+              f'<g transform="translate(645 110) scale(1.1)">{wordmark(True)}</g>')
+    render(banner, 1920, 1080, (0, 0, 1920, 1080)).save(brand / "store-hero-1920x1080.png")
+    print("icon.ico, logo.png, icon_preview.png and brand/ saved")
 
-    # Topbar mark used by main.pyw, plus a full-size preview.
-    master.resize((40, 40), Image.LANCZOS).save(os.path.join(here, 'logo.png'))
-    master.resize((256, 256), Image.LANCZOS).save(
-        os.path.join(here, 'icon_preview.png'))
-    print('icon.ico, logo.png and icon_preview.png saved')
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
