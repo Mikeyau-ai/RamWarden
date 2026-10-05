@@ -701,49 +701,6 @@ FLASH_BG        = C['warn']
 LIVE_MIN_MS     = 1500
 LIVE_MAX_MS     = 10000
 
-# Tuned to read as a fine vibration rather than a swing: 6px peak-to-peak at
-# ~12Hz over ~240ms. Earlier attempts went wrong in both directions — a 19px
-# swing reversing at 22Hz made the window look like it was blinking, and
-# slowing that to 5Hz just turned it into the window being thrown around.
-# Small travel with quick reversal is what gives a kill punch without moving
-# the window far. If you raise the frequency, keep the swing small: it was a
-# *large* fast oscillation that flickered, not a fast one.
-# tools/preview_killfx.py imports these to compare profiles side by side.
-
-SHAKE_PX        = 4        # peak horizontal offset of the recoil; 0 disables it
-SHAKE_MS        = 16       # per frame — one frame at 60Hz
-SHAKE_FRAMES    = 14       # 14 x 16ms = ~240ms of recoil
-SHAKE_CYCLES    = 4.5      # oscillations over that span, i.e. ~12Hz
-SHAKE_DECAY     = 0.8      # ring-down exponent; lower rings longer
-
-
-def shake_path(amp, frames=SHAKE_FRAMES, cycles=SHAKE_CYCLES, decay=SHAKE_DECAY):
-    """Damped-sine offsets for the window recoil.
-
-    The first version alternated +amp/-amp on consecutive frames, which flips
-    sign about 28 times a second. That is fast enough to land in flicker-fusion
-    territory: a window the size of this one square-waving at 28Hz reads as
-    blinking rather than moving, which is why the shake looked like the window
-    was closing and reopening.
-
-    A damped sine fixes both halves of that. It starts at zero instead of
-    teleporting to full amplitude on frame one, and it crosses zero only
-    `cycles` times over the whole animation (~5Hz here), so the eye tracks it
-    as motion. The vertical component runs at a different frequency and a third
-    of the amplitude so the movement is not a straight line.
-    """
-    path = []
-    for i in range(frames):
-        t = i / (frames - 1)
-        ring = (1.0 - t) ** decay                 # ring down to nothing
-        path.append((
-            round(amp * ring * math.sin(2 * math.pi * cycles * t)),
-            round(amp * ring * math.sin(2 * math.pi * cycles * 1.5 * t) / 3),
-        ))
-    path.append((0, 0))                           # guarantee an exact landing
-    return path
-
-
 def fmt_mem(b):
     if b < 1024 ** 2:
         return f"{b / 1024:.0f} KB"
@@ -823,7 +780,6 @@ class RamWarden(tk.Tk):
         self._row_vals      = {}   # iid → cell strings last written to the tree
         self._row_tags      = {}   # iid → tag tuple last written to the tree
         self._dying         = set()   # iids mid kill-animation, not yet removed
-        self._shaking       = False
         self._filter_pending = False  # a refresh held back by a running animation
         self._logo_img      = None      # kept alive; Tk does not own PhotoImages
         self._init_style()
@@ -1403,49 +1359,6 @@ class RamWarden(tk.Tk):
             self._hover_iid = None
 
     # ── Kill feedback ──────────────────────────────────────────────────────────
-    def _shake(self):
-        """Recoil the window briefly so a kill lands with some weight.
-
-        The window is moved with SetWindowPos on the real HWND rather than
-        wm_geometry. Tk's geometry() is a request-then-confirm round trip that
-        emits two <Configure> events per call, so a ten-frame shake pushed the
-        window through twenty reconfigures and visibly strobed the frame.
-
-        Skipped while maximised: moving a zoomed window fights the window
-        manager and snaps it out of the maximised state."""
-        if not SHAKE_PX or self._shaking or self.state() != 'normal':
-            return
-        try:
-            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
-            rect = wintypes.RECT()
-            if not ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-                return
-        except Exception:
-            return                      # cosmetic only; never break a kill
-        origin_x, origin_y = rect.left, rect.top
-        # NOSIZE | NOZORDER | NOACTIVATE — move only, never resize or refocus.
-        flags = 0x0001 | 0x0004 | 0x0010
-
-        def move(x, y):
-            try:
-                ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, 0, 0, flags)
-            except Exception:
-                pass
-
-        path = shake_path(SHAKE_PX)
-        self._shaking = True
-
-        def step(i=0):
-            if i >= len(path):
-                move(origin_x, origin_y)
-                self._shaking = False
-                return
-            dx, dy = path[i]
-            move(origin_x + dx, origin_y + dy)
-            self.after(SHAKE_MS, step, i + 1)
-
-        step()
-
     def _start_kill_anim(self, iid):
         """Mark a killed row as dying and begin its blink/fade."""
         if iid in self._dying or not self.tree.exists(iid):
@@ -2307,7 +2220,6 @@ class RamWarden(tk.Tk):
             sounds.play_blocked()
         elif killed:
             sounds.play_kill()
-            self._shake()
 
         killed_pids       = {int(iid) for iid in sel}
         self._all_results = [r for r in self._all_results if r['pid'] not in killed_pids]
@@ -2380,7 +2292,6 @@ class RamWarden(tk.Tk):
             sounds.play_blocked()
         elif killed:
             sounds.play_kill()
-            self._shake()
 
         killed_pids       = {int(iid) for iid in child_iids}
         self._all_results = [r for r in self._all_results if r['pid'] not in killed_pids]

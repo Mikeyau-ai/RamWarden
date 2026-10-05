@@ -12,6 +12,8 @@ than tags that once existed.
 - **No more gunshots or voice lines.** Closing a process plays a soft short tick, and a refused
   close a muted low thunk; both are plain synthesised tones (`tools/generate_ui_sounds.py`).
   The kill-streak announcer and its streak counting are gone, with the ElevenLabs clips.
+- The window no longer shakes when a process closes (a shake reads as "that failed"); the
+  closed row's fade-out is the feedback. `tools/preview_killfx.py` (the shake tuner) is gone.
 - **Renamed RamBo -> RamWarden** (the old name is a registered film trademark). Window, installer,
   exe, settings folder (`%LOCALAPPDATA%\RamWarden`), licence product and codes (RAMWARDEN-...)
   all follow; the installer AppId is unchanged so it upgrades an existing RamBo install.
