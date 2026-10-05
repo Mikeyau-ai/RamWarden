@@ -121,7 +121,7 @@ def status(now=None):
 
 
 def allowed(now=None):
-    """True when the licence/trial lets RamWarden change the system (kill, trim, startup)."""
+    """True when the licence/trial lets RamWarden change the system (end processes, trim, startup)."""
     return status(now)["state"] in ("licensed", "trial")
 
 

@@ -31,10 +31,10 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 - **TRIM RAM** calls `SetProcessWorkingSetSizeEx` across all processes, asking
   Windows to page out idle working sets. It does not free leaked memory.
-- **KILL CHILDREN** terminates a duplicate group's children and leaves the root
+- **END CHILD PROCESSES** ends a duplicate group's children and leaves the root
   running — usually what you want for a misbehaving browser.
-- Right-click a row for *Open file location*, *Copy PID*, *Copy row*, *Kill*.
-  `Ctrl+A` selects all, `Ctrl+C` copies as TSV, `Delete` kills.
+- Right-click a row for *Open file location*, *Copy PID*, *Copy row*, *End process*.
+  `Ctrl+A` selects all, `Ctrl+C` copies as TSV, `Delete` ends the selected processes.
 - **ADMIN** appears when not elevated. Terminating system-owned processes and
   editing protected startup entries needs it.
 

@@ -204,7 +204,7 @@ class HoverButton(tk.Button):
 CHIP_HELP = {
     'dupes': """Two or more processes running the same executable.
 
-Main is the top of the tree - its parent is not another copy. Child processes were spawned by it, so killing a Main usually takes the whole application with it.""",
+Main is the top of the tree - its parent is not another copy. Child processes were spawned by it, so ending a Main usually takes the whole application with it.""",
 
     'hung': """The process owns a visible window that has stopped answering Windows messages - the same state Task Manager calls "Not responding".
 
@@ -473,7 +473,7 @@ class LicenceWindow(tk.Toplevel):
 
     _MESSAGES = {
         "trial_over": "Your 14-day trial has ended. RamWarden still scans and shows everything; "
-                      "activate it to kill, trim and manage startup again.",
+                      "activate it to end processes, trim and manage startup again.",
         "check_needed": "RamWarden needs to check its licence online. Connect to the internet and "
                         "reopen this window, or activate below.",
     }
@@ -687,12 +687,12 @@ def close_failure_reason(err, name, admin):
     """A plain-English reason a process couldn't be closed, and what to do about it."""
     n = (name or '').lower()
     if isinstance(err, psutil.NoSuchProcess):            # includes ZombieProcess
-        return "It had already closed."
+        return "It had already ended."
     if n in CRITICAL_NAMES:
-        return ("It's a core part of Windows. Windows never lets any app close it, "
+        return ("It's a core part of Windows. Windows never lets any app end it, "
                 "because the PC would crash.")
     if n in SECURITY_NAMES:
-        return ("It's security software, which protects itself from being closed. "
+        return ("It's security software, which protects itself from being ended. "
                 "Turn it off from its own window or settings if you need to.")
     if not admin:
         return ("Windows refused: it's running with administrator rights or belongs to "
@@ -955,12 +955,12 @@ class RamWarden(tk.Tk):
         self._btns_frame = btns
 
         # Pack order with side=RIGHT: last packed = leftmost visually.
-        # Result: [SCAN] [LIVE] [KILL CHILDREN] [KILL SELECTED]
-        self.kill_btn = self._mk_btn(btns, "⊗  KILL SELECTED",
+        # Result: [SCAN] [LIVE] [END CHILD PROCESSES] [END SELECTED]
+        self.kill_btn = self._mk_btn(btns, "⊗  END SELECTED",
                                      self._kill_selected, C['red'], state=tk.DISABLED)
         self.kill_btn.pack(side=tk.RIGHT, padx=(6, 0))
 
-        self.kill_children_btn = self._mk_btn(btns, "⊗  KILL CHILDREN",
+        self.kill_children_btn = self._mk_btn(btns, "⊗  END CHILD PROCESSES",
                                               self._kill_children, C['orange'], state=tk.DISABLED)
         self.kill_children_btn.pack(side=tk.RIGHT, padx=(6, 0))
 
@@ -1352,7 +1352,7 @@ class RamWarden(tk.Tk):
         self._menu.add_command(label="Copy PID", command=self._copy_pid)
         self._menu.add_command(label="Copy row", command=self._copy_selection)
         self._menu.add_separator()
-        self._menu.add_command(label="Kill", command=self._kill_selected)
+        self._menu.add_command(label="End process", command=self._kill_selected)
 
         self._sort_col = None
         self._sort_rev = False
@@ -2213,12 +2213,12 @@ class RamWarden(tk.Tk):
         if main_procs:
             names = ', '.join(f"{r['name']} (PID {r['pid']})" for r in main_procs)
             proceed = messagebox.askyesno(
-                "⚠  Killing Main Process",
+                "⚠  Ending a main process",
                 f"You have selected {len(main_procs)} MAIN process(es):\n\n"
                 f"  {names}\n\n"
                 f"These are the root processes of multi-instance apps "
                 f"(e.g. Electron, Chrome, Claude).\n"
-                f"Killing them will likely crash the entire application, "
+                f"Ending them will likely close the entire application, "
                 f"including all its child processes.\n\n"
                 f"Are you sure you want to continue?",
                 icon="warning", parent=self
@@ -2231,8 +2231,9 @@ class RamWarden(tk.Tk):
             for r in records
         )
         if not messagebox.askyesno(
-            "Confirm Kill",
-            f"Terminate {len(sel)} process(es)?\n\n{lines}",
+            "End processes",
+            f"End {len(sel)} process(es)?\n\n{lines}\n\n"
+            f"They stop straight away: anything unsaved in them will be lost.",
             icon="warning", parent=self
         ):
             return
@@ -2263,7 +2264,7 @@ class RamWarden(tk.Tk):
 
         shown = len([i for i in self.tree.get_children() if i not in self._dying])
         total = len(self._all_results)
-        self.status_var.set(f"Terminated {killed} process(es)")
+        self.status_var.set(f"Ended {killed} process(es)")
         self.summary_var.set(f"{shown} shown  /  {total} found" if total else "")
         self.kill_btn.config(state=tk.DISABLED)
         self.kill_children_btn.config(state=tk.DISABLED)
@@ -2281,9 +2282,9 @@ class RamWarden(tk.Tk):
         more = len(failed) - CLOSE_FAILURES_SHOWN
         if more > 0:
             lines.append(f"…and {more} more.")
-        head = (f"Closed {closed} of {closed + len(failed)}." if closed
-                else f"Couldn't close {'it' if len(failed) == 1 else 'them'}.")
-        messagebox.showwarning("Couldn't close everything" if closed else "Couldn't close",
+        head = (f"Ended {closed} of {closed + len(failed)}." if closed
+                else f"Couldn't end {'it' if len(failed) == 1 else 'them'}.")
+        messagebox.showwarning("Couldn't end everything" if closed else "Couldn't end",
                                head + "\n\n" + "\n\n".join(lines), parent=self)
 
     def _kill_children(self):
@@ -2315,9 +2316,9 @@ class RamWarden(tk.Tk):
             for r in records
         )
         if not messagebox.askyesno(
-            "Confirm Kill Children",
-            f"Terminate {len(child_iids)} child process(es)?\n\n{lines}\n\n"
-            f"The main process will remain running.",
+            "End child processes",
+            f"End {len(child_iids)} child process(es)?\n\n{lines}\n\n"
+            f"The main process keeps running. Anything unsaved in these will be lost.",
             icon="warning", parent=self
         ):
             return
@@ -2348,7 +2349,7 @@ class RamWarden(tk.Tk):
 
         shown = len([i for i in self.tree.get_children() if i not in self._dying])
         total = len(self._all_results)
-        self.status_var.set(f"Terminated {killed} child process(es)")
+        self.status_var.set(f"Ended {killed} child process(es)")
         self.summary_var.set(f"{shown} shown  /  {total} found" if total else "")
         self._on_select()
 
