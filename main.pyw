@@ -11,6 +11,7 @@ import ctypes
 import math
 import re
 import webbrowser
+import logging
 from ctypes import wintypes
 
 # Resolve resource path — works both from source and frozen (PyInstaller)
@@ -104,15 +105,18 @@ def is_admin():
         return False
 
 
+ELEVATED_FLAG = "--elevated"          # passed to the copy the ADMIN button starts
+
+
 def relaunch_as_admin():
     """Re-launch this app through the UAC 'runas' verb. Returns True if the
     elevated process was started (the caller should then exit)."""
     if getattr(sys, 'frozen', False):
-        exe, params = sys.executable, ''
+        exe, params = sys.executable, ELEVATED_FLAG
     else:
         # Running from source: re-run this script under the same interpreter.
         exe = sys.executable
-        params = '"{}"'.format(os.path.abspath(__file__))
+        params = '"{}" {}'.format(os.path.abspath(__file__), ELEVATED_FLAG)
     try:
         # ShellExecuteW returns >32 on success; <=32 is an error code, and 5
         # specifically means the user dismissed the UAC prompt.
@@ -337,6 +341,8 @@ class AboutWindow(tk.Toplevel):
         bar.pack(fill=tk.X)
         self._app._mk_btn(bar, "  VIEW ON GITHUB  ", self._open_repo,
                           C['btn_off']).pack(side=tk.LEFT)
+        self._app._mk_btn(bar, "  OPEN LOG FOLDER  ", lambda: os.startfile(LOG_DIR),
+                          C['btn_off']).pack(side=tk.LEFT, padx=(8, 0))
         store = updater.is_store_install()
         if not store:
             self.check_btn = self._app._mk_btn(bar, "  CHECK FOR UPDATES  ",
@@ -663,7 +669,8 @@ SECURITY_NAMES = {
     'mbamservice.exe', 'mbamtray.exe', 'ccsvchst.exe', 'bdagent.exe', 'vsserv.exe',
     'ekrn.exe', 'egui.exe', 'avp.exe', 'nortonsecurity.exe', 'mcshield.exe',
 }
-CLOSE_FAILURES_SHOWN = 8      # list this many in the dialog, then "and N more"
+CLOSE_FAILURES_SHOWN = 8
+TRIM_BUSY_CPU = 1.0           # % CPU in the last scan at or above which TRIM RAM leaves an app alone      # list this many in the dialog, then "and N more"
 
 
 def close_failure_reason(err, name, admin):
@@ -1173,7 +1180,7 @@ class RamWarden(tk.Tk):
         if not messagebox.askyesno(
                 "Restart as administrator",
                 "RamWarden will close and reopen with administrator rights.\n\n"
-                "Without them, terminating system-owned processes and changing "
+                "Without them, ending system-owned processes and changing "
                 "protected startup entries will fail.\n\nContinue?",
                 icon="question", parent=self):
             return
@@ -1698,11 +1705,40 @@ class RamWarden(tk.Tk):
                                   font=FONT_DATA, width=18, anchor=tk.E)
         self.ram_label.pack(side=tk.LEFT, padx=(8, 0))
 
+        # Sound on/off: a quiet text switch, remembered between runs.
+        sounds.set_enabled(updater._load_settings().get('sound', True))
+        self.sound_lbl = tk.Label(bar, bg=C['panel'], fg=C['dim'], font=FONT_UI, cursor="hand2")
+        self.sound_lbl.pack(side=tk.RIGHT, padx=(0, 24))
+        self.sound_lbl.bind("<Button-1>", lambda _: self._toggle_sound())
+        self.sound_lbl.bind("<Enter>", lambda _: self.sound_lbl.config(fg=C['text']))
+        self.sound_lbl.bind("<Leave>", lambda _: self.sound_lbl.config(fg=C['dim']))
+        self._show_sound_state()
+
         tk.Label(bar, textvariable=self.summary_var,
                  bg=C['panel'], fg=C['teal'], font=FONT_UI_BOLD
                  ).pack(side=tk.RIGHT, padx=(0, 24))
 
         self._update_ram()
+
+    def report_callback_exception(self, exc, val, tb):
+        """An error inside the UI: log it for support instead of losing it (a windowed app has no console)."""
+        logging.getLogger("ramwarden").error("Error in the window", exc_info=(exc, val, tb))
+        try:
+            self.status_var.set("Something went wrong. It's been noted in the log "
+                                "(About → OPEN LOG FOLDER) if you need support.")
+            self.status_lbl.config(fg=C['red'])
+        except Exception:
+            pass
+
+    def _toggle_sound(self):
+        """Flip sounds on/off and remember it."""
+        sounds.set_enabled(not sounds.is_enabled())
+        updater._save_setting('sound', sounds.is_enabled())
+        self._show_sound_state()
+
+    def _show_sound_state(self):
+        """The status-bar switch's label for the current setting."""
+        self.sound_lbl.config(text="🔊  Sound on" if sounds.is_enabled() else "🔇  Sound off")
 
     def _rounded_bar(self, canvas, width, colour):
         """Draw a pill-shaped bar of `width` px; returns its canvas item ids."""
@@ -2343,13 +2379,19 @@ class RamWarden(tk.Tk):
         self._trimming = True
         self.trim_all_btn.config(state=tk.DISABLED, text="TRIMMING...")
         self.trim_sel_btn.config(state=tk.DISABLED)
-        self.status_var.set("Trimming working sets…")
+        self.status_var.set("Trimming idle background apps…")
+        # Skip Windows' own processes (paging them out just slows Windows down) and anything
+        # busy in the last scan (it would pull its memory straight back in). Unknown CPU = idle.
+        skip = {r['pid'] for r in self._all_results
+                if r['is_system'] or r['name'].lower() in CRITICAL_NAMES
+                or (r['cpu'] is not None and r['cpu'] >= TRIM_BUSY_CPU)}
+        skip.add(os.getpid())
 
         def _do():
             freed = 0
             count = 0
             try:
-                pids = psutil.pids()
+                pids = [p for p in psutil.pids() if p > 4 and p not in skip]
                 for pid in pids:
                     result = trim_process(pid)
                     if result > 0:
@@ -2365,12 +2407,67 @@ class RamWarden(tk.Tk):
             has_sel = bool(self.tree.selection())
             self.trim_sel_btn.config(state=tk.NORMAL if has_sel else tk.DISABLED)
             self.status_var.set(
-                f"Trimmed {count} process(es) — freed {freed_mb:.1f} MB")
+                f"Trimmed {count} idle app(s) — freed {freed_mb:.1f} MB "
+                f"(Windows' own and busy apps left alone)")
             self._update_ram()
 
         threading.Thread(target=_do, daemon=True).start()
 
 
+LOG_DIR = str(updater.USER_ROOT)
+INSTANCE_NAME = "Local\\SixthDayStudios.RamWarden"
+
+
+def setup_crash_log():
+    """Log to %LOCALAPPDATA%\\RamWarden\\ramwarden.log (kept small): every unhandled error, from
+    the main thread or a worker, with the version and Windows build, for support requests."""
+    import logging.handlers
+    import platform
+    os.makedirs(LOG_DIR, exist_ok=True)
+    handler = logging.handlers.RotatingFileHandler(
+        os.path.join(LOG_DIR, "ramwarden.log"), maxBytes=256 * 1024, backupCount=1, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log = logging.getLogger("ramwarden")
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+    log.info(f"RamWarden {APP_VERSION} started on Windows {platform.version()}"
+             f"{' (Store)' if updater.is_store_install() else ''}{' as admin' if is_admin() else ''}")
+    sys.excepthook = lambda t, v, tb: log.critical("Unhandled error", exc_info=(t, v, tb))
+    threading.excepthook = lambda a: log.error(f"Error in thread {a.thread.name if a.thread else '?'}",
+                                               exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
+
+
+def claim_single_instance():
+    """True if no other RamWarden is open. Otherwise bring that one to the front and return False.
+
+    A named mutex marks the running copy (kept for this process's life). The copy the ADMIN
+    button starts (ELEVATED_FLAG) waits up to 10 s for the old copy to close instead of giving
+    way to it. A copy running as admin can make the name unreadable to a normal one (access
+    denied), which also means "already running"."""
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateMutexW.restype = wintypes.HANDLE
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    deadline = time.monotonic() + (10 if ELEVATED_FLAG in sys.argv else 0)
+    while True:
+        handle = k32.CreateMutexW(None, False, INSTANCE_NAME)
+        err = ctypes.get_last_error()
+        if handle and err != 183:                       # 183 = ERROR_ALREADY_EXISTS
+            globals()["_instance_mutex"] = handle       # held until RamWarden exits
+            return True
+        if handle:
+            k32.CloseHandle(handle)
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.25)
+    hwnd = _user32.FindWindowW(None, "RamWarden")
+    if hwnd:
+        _user32.ShowWindow(hwnd, 9)                     # SW_RESTORE (un-minimise)
+        _user32.SetForegroundWindow(hwnd)
+    return False
+
+
 if __name__ == "__main__":
-    app = RamWarden()
-    app.mainloop()
+    setup_crash_log()
+    if claim_single_instance():
+        app = RamWarden()
+        app.mainloop()

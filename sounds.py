@@ -8,7 +8,7 @@ tones made by tools/generate_ui_sounds.py (they replaced gunshots and a kill-str
 Stdlib only: winsound ships with CPython on Windows and plays a 16-bit PCM
 WAV asynchronously, which is all this needs.
 
-Public API: play_kill(), play_blocked().
+Public API: play_kill(), play_blocked(), set_enabled(on), is_enabled().
 """
 import os
 import random
@@ -19,6 +19,21 @@ _VARIANTS = {
     'kill':    ('Close.wav',),
     'blocked': ('Blocked.wav',),
 }
+
+# Sound on/off (the status bar's switch; remembered in settings.json by main.pyw).
+_enabled = True
+
+
+def set_enabled(on):
+    """Turn RamWarden's sounds on or off."""
+    global _enabled
+    _enabled = bool(on)
+
+
+def is_enabled():
+    """True while sounds are on."""
+    return _enabled
+
 
 # Last variant played per group, so the same take is never heard twice running.
 _last = {}
@@ -38,7 +53,7 @@ def _play(group):
     turn into an error dialog on top of a kill that otherwise worked.
     """
     names = _VARIANTS.get(group)
-    if not names:
+    if not names or not _enabled:
         return
 
     # Avoid an immediate repeat, but only when there is something else to pick.

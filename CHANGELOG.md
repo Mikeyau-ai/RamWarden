@@ -9,6 +9,21 @@ ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
 ## Unreleased (licensing; not published yet)
+- **Scans are ~250x faster**: every process now comes from one Windows call (`procsnap.py`,
+  ~10 ms for ~400 processes, was 2.4 s), so Live mode costs next to nothing. Each process is
+  identified by PID + start time, so a recycled PID never shows the old process's name.
+- **MEMORY now matches Task Manager** (private working set), and there's a **CPU** column.
+- **APP TOTAL**: an app's main process shows its whole family's memory (e.g. 19 processes,
+  2.4 GB). Separate copies (like svchost) aren't added together.
+- **Startup tab: works on every Windows language** (scheduled tasks are read as XML; the old
+  English CSV labels are translated elsewhere, so tasks silently vanished) and loads ~10x faster
+  (2.5 s -> 0.2 s). Startup-folder shortcuts are read directly (`lnkfile.py`), no PowerShell.
+- **TRIM RAM trims idle background apps only**: Windows' own processes and anything busy in the
+  last scan are left alone (they would page straight back in). TRIM SELECTED is unchanged.
+- **Sound on/off** switch in the status bar, remembered.
+- **One copy at a time**: opening RamWarden again brings the open window forward (the ADMIN
+  restart still works: the elevated copy waits for the old one to close).
+- **Crash log** for support: `%LOCALAPPDATA%\RamWardenamwarden.log` (About -> OPEN LOG FOLDER).
 - **No more gunshots or voice lines.** Closing a process plays a soft short tick, and a refused
   close a muted low thunk; both are plain synthesised tones (`tools/generate_ui_sounds.py`).
   The kill-streak announcer and its streak counting are gone, with the ElevenLabs clips.

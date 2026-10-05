@@ -29,8 +29,11 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 | `Suspended` | Process is stopped |
 | `Orphan` | Parent is gone and the process is 12h+ old |
 
-- **TRIM RAM** calls `SetProcessWorkingSetSizeEx` across all processes, asking
-  Windows to page out idle working sets. It does not free leaked memory.
+- **TRIM RAM** calls `SetProcessWorkingSetSizeEx` on idle background apps (Windows' own
+  processes and anything busy are left alone), asking Windows to page out idle working sets.
+  It does not free leaked memory.
+- **MEMORY** is the private working set (Task Manager's figure); **CPU** is since the last scan;
+  **APP TOTAL** is a main process plus every copy it started.
 - **END CHILD PROCESSES** ends a duplicate group's children and leaves the root
   running — usually what you want for a misbehaving browser.
 - Right-click a row for *Open file location*, *Copy PID*, *Copy row*, *End process*.
