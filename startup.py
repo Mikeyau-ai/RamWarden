@@ -5,6 +5,8 @@ No tkinter dependency. Public API: scan_startup(), set_enabled(), StartupAccessE
 import os
 import winreg
 
+from lnkfile import read_lnk
+
 class StartupAccessError(Exception):
     """Raised when enable/disable requires elevation."""
 
@@ -92,37 +94,6 @@ _STARTUP_FOLDERS = [
 ]
 
 
-def _resolve_lnk_batch(folder_path: str) -> dict:
-    """Return {lnk_filename: target_command_string} for all .lnk files in folder_path."""
-    import subprocess
-    script = (
-        '$sh = New-Object -COM WScript.Shell; '
-        f'Get-ChildItem "{folder_path}" -Filter *.lnk -ErrorAction SilentlyContinue | '
-        'ForEach-Object { '
-        '    $lnk = $sh.CreateShortcut($_.FullName); '
-        '    $t = $lnk.TargetPath; '
-        '    $a = $lnk.Arguments; '
-        '    $cmd = if ($a) { "$t $a".Trim() } else { $t }; '
-        '    Write-Output "$($_.Name)|$cmd" '
-        '}'
-    )
-    try:
-        result = subprocess.run(
-            ['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
-            capture_output=True, text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-            timeout=15,
-        )
-    except Exception:
-        return {}
-    out = {}
-    for line in result.stdout.splitlines():
-        if '|' in line:
-            lnk_name, _, cmd = line.partition('|')
-            out[lnk_name.strip()] = cmd.strip()
-    return out
-
-
 def _scan_startup_folders() -> list:
     """Return startup entries from user and all-users Startup folders."""
     entries = []
@@ -133,11 +104,12 @@ def _scan_startup_folders() -> list:
             continue
         if not lnk_files:
             continue
-        resolved = _resolve_lnk_batch(folder_path)
         approved = _read_approved(hive, approved_subkey)
         for lnk_filename in lnk_files:
             name = os.path.splitext(lnk_filename)[0]
-            command = resolved.get(lnk_filename) or os.path.join(folder_path, lnk_filename)
+            # Read the shortcut directly (lnkfile); this used to start PowerShell for every folder.
+            target, args = read_lnk(os.path.join(folder_path, lnk_filename))
+            command = (f'{target} {args}'.strip() if target else '') or os.path.join(folder_path, lnk_filename)
             enabled = approved.get(lnk_filename, True)
             entries.append({
                 'name':           name,
@@ -151,63 +123,75 @@ def _scan_startup_folders() -> list:
     return entries
 
 
+# Accounts whose logon tasks belong to Windows itself (SIDs, and names for older task files).
+_SYSTEM_ACCOUNTS = {'S-1-5-18', 'S-1-5-19', 'S-1-5-20', 'SYSTEM', 'NT AUTHORITY\\SYSTEM',
+                    'LOCAL SERVICE', 'NETWORK SERVICE', 'NT AUTHORITY\\LOCAL SERVICE',
+                    'NT AUTHORITY\\NETWORK SERVICE'}
+_TASK_NS = {'t': 'http://schemas.microsoft.com/windows/2004/02/mit/task'}
+
+
+def _parse_tasks_xml(text: str) -> list:
+    """Logon-triggered tasks from `schtasks /query /xml` output, skipping Windows' own accounts.
+
+    That output is each task's own XML document (declaration and all) inside a <Tasks> wrapper,
+    each preceded by a <!-- \\Path\\Name --> comment, so the tasks are parsed one at a time.
+    The XML element names are the same in every Windows language, unlike schtasks' CSV text
+    columns ("Schedule Type", "At logon time"), which are translated, so the old parser found
+    no tasks at all on non-English Windows."""
+    import re
+    import xml.etree.ElementTree as ET
+    tasks, seen = [], set()
+    for path, body in re.findall(r'<!--\s*(.+?)\s*-->\s*(?:<\?xml[^>]*\?>)?\s*(<Task\b.*?</Task>)', text, re.S):
+        try:
+            task = ET.fromstring(body)
+        except ET.ParseError:
+            continue
+        triggers = task.findall('t:Triggers/t:LogonTrigger', _TASK_NS)
+        if not any((tr.findtext('t:Enabled', 'true', _TASK_NS) or 'true').strip().lower() != 'false' for tr in triggers):
+            continue
+        user = (task.findtext('t:Principals/t:Principal/t:UserId', '', _TASK_NS) or '').strip().upper()
+        if user in _SYSTEM_ACCOUNTS or path in seen:
+            continue
+        seen.add(path)
+        exe = task.find('t:Actions/t:Exec', _TASK_NS)
+        if exe is not None:
+            command = ' '.join(x for x in (exe.findtext('t:Command', '', _TASK_NS).strip(),
+                                           exe.findtext('t:Arguments', '', _TASK_NS).strip()) if x)
+        else:
+            command = 'COM handler'
+        enabled = (task.findtext('t:Settings/t:Enabled', 'true', _TASK_NS) or 'true').strip().lower() != 'false'
+        tasks.append({
+            'name':           os.path.basename(path.strip('\\')) or path,
+            'command':        command,
+            'source':         'Task',
+            'enabled':        enabled,
+            'key':            path,
+            'hive':           None,
+            'approved_subkey': '',
+        })
+    return tasks
+
+
 def _scan_tasks() -> list:
-    """Return logon-triggered Task Scheduler entries, excluding SYSTEM tasks."""
+    """Return logon-triggered Task Scheduler entries, excluding Windows' own (SYSTEM etc.)."""
     import subprocess
-    import csv
-    import io
-
-    _SYSTEM_ACCOUNTS = {'SYSTEM', 'NT AUTHORITY\\SYSTEM', 'LOCAL SERVICE', 'NETWORK SERVICE'}
-
     try:
         result = subprocess.run(
-            ['schtasks', '/query', '/fo', 'CSV', '/v'],
+            ['schtasks', '/query', '/xml'],
             capture_output=True,
             creationflags=subprocess.CREATE_NO_WINDOW,
             timeout=15,
         )
     except Exception:
         return []
-
     if result.returncode != 0:
         return []
-
-    text = result.stdout.decode('utf-8', errors='replace')
+    # schtasks writes in the console's code page; UTF-8 first, then Windows' ANSI page.
     try:
-        reader = csv.DictReader(io.StringIO(text))
-    except Exception:
-        return []
-
-    tasks = []
-    seen_names = set()
-    for row in reader:
-        try:
-            schedule_type = row.get('Schedule Type', '').lower()
-            if 'logon' not in schedule_type:
-                continue
-            run_as = row.get('Run As User', '').strip().upper()
-            if run_as in _SYSTEM_ACCOUNTS:
-                continue
-            task_name = row.get('TaskName', '').strip()
-            if not task_name or task_name in seen_names:
-                continue
-            seen_names.add(task_name)
-            command = row.get('Task To Run', '').strip()
-            # 'Scheduled Task State' column: 'Enabled' or 'Disabled'
-            state = row.get('Scheduled Task State', 'Enabled').strip().lower()
-            display_name = os.path.basename(task_name.strip('\\')) or task_name
-            tasks.append({
-                'name':           display_name,
-                'command':        command,
-                'source':         'Task',
-                'enabled':        state == 'enabled',
-                'key':            task_name,
-                'hive':           None,
-                'approved_subkey': '',
-            })
-        except (KeyError, AttributeError):
-            continue
-    return tasks
+        text = result.stdout.decode('utf-8')
+    except UnicodeDecodeError:
+        text = result.stdout.decode('mbcs', errors='replace')
+    return _parse_tasks_xml(text)
 
 
 def _dedup(entries: list) -> list:

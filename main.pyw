@@ -23,27 +23,10 @@ try:
 except Exception:
     pass
 
-# psutil's Process.ppid() takes a fresh system-wide snapshot per call on
-# Windows, so reading it for every process costs seconds. ppid_map() gets the
-# whole table in one call. It is private, hence the guarded import and the
-# per-process fallback if a future psutil moves it.
-try:
-    from psutil._pswindows import ppid_map as _ppid_map
-except ImportError:
-    def _ppid_map():
-        """Fallback: {pid: ppid} the slow way."""
-        out = {}
-        for proc in psutil.process_iter(['pid', 'ppid']):
-            try:
-                out[proc.pid] = proc.info['ppid'] or 0
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-        return out
-
-
 from startup import scan_startup, set_enabled, StartupAccessError
 import updater
 import licence
+import procsnap
 import sounds
 
 # Single source of truth for the version; the release scripts parse this.
@@ -802,8 +785,8 @@ class RamWarden(tk.Tk):
         self._startup_scanning  = False
         self._startup_results   = []
         self._all_results   = []
-        self._proc_static   = {}   # pid → (name, ppid, create_time), immutable
-        self._proc_status   = {}   # pid → status, refreshed on full scans only
+        self._cpu           = procsnap.CpuMeter()   # CPU % between consecutive scans
+        self._cpu.update(procsnap.snapshot())        # baseline, so the first scan already shows CPU
         self._live          = False
         self._live_after_id = None
         self._last_scan_ms  = 0.0   # drives the adaptive live interval
@@ -1282,7 +1265,7 @@ class RamWarden(tk.Tk):
         frame = tk.Frame(parent, bg=C['bg'], padx=20, pady=12)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("process", "pid", "memory", "issue", "role", "instances")
+        cols = ("process", "pid", "memory", "cpu", "issue", "role", "instances", "total")
         self.tree = ttk.Treeview(frame, columns=cols, show="headings",
                                  style="R.Treeview", selectmode="extended")
 
@@ -1290,9 +1273,11 @@ class RamWarden(tk.Tk):
             ("process",   "PROCESS NAME",  255, tk.W),
             ("pid",       "PID",            70, tk.CENTER),
             ("memory",    "MEMORY",        105, tk.E),
+            ("cpu",       "CPU",            70, tk.E),
             ("issue",     "ISSUE",         130, tk.CENTER),
             ("role",      "ROLE",           90, tk.CENTER),
             ("instances", "INSTANCES",      80, tk.CENTER),
+            ("total",     "APP TOTAL",     105, tk.E),
         ]
         for cid, heading, width, anchor in col_cfg:
             # heading anchor is independent of column anchor — keep them in sync
@@ -1774,8 +1759,7 @@ class RamWarden(tk.Tk):
     def _do_scan(self, quiet=False):
         started = time.perf_counter()
         try:
-            # A live tick skips the expensive status() re-read; see _collect.
-            self._all_results = self._find_issues(full=not quiet)
+            self._all_results = self._find_issues()
             self.after(0, self._apply_filter)
         except Exception as e:
             self.after(0, lambda: self.status_var.set(f"Error: {e}"))
@@ -1783,111 +1767,88 @@ class RamWarden(tk.Tk):
             self._last_scan_ms = (time.perf_counter() - started) * 1000
             self.after(0, self._scan_done, quiet)
 
-    def _collect(self, full):
-        """One snapshot of every process, as (pid, name, ppid, born, rss, status).
+    def _collect(self):
+        """Every process from one Windows call (procsnap, ~10 ms for ~400 processes), plus
+        each one's CPU % since the previous scan (absent the first time a process is seen).
 
-        psutil is startlingly expensive on Windows, and measurably so here:
-        over ~390 processes, ppid costs 4.5s, status 3.5s, memory 1.8s and
-        name+create_time 1.6s. The old scan paid all of that AND then re-read
-        the same values through proc.status()/.memory_info() instead of the
-        already-fetched proc.info, for about 15 seconds a scan. Live mode ticks
-        every 5s, so it was simply always scanning — that is the lag.
+        This replaced several psutil calls per process (2.4 s a full scan) and a cache keyed
+        by PID, which showed the wrong name once Windows recycled a PID; procsnap identifies
+        each process by (PID, start time)."""
+        procs = procsnap.snapshot()
+        return procs, self._cpu.update(procs)
 
-        Three things make it cheap:
-          * ppid comes from one ppid_map() call rather than one system snapshot
-            per process, which is where the 4.5s went (4460ms -> 11ms).
-          * name, ppid and create_time cannot change while a pid lives, so they
-            are read once and cached.
-          * `full` is False on a live tick, which skips status() — the single
-            most expensive call. New pids are always read in full, so a process
-            that shows up already suspended is still classified correctly; only
-            a state change on a pid we have already seen waits for a full scan.
-        """
-        parents = _ppid_map()
-        static, status_cache = self._proc_static, self._proc_status
-        rows, seen = [], set()
-
-        for proc in psutil.process_iter(['pid']):
-            pid = proc.pid
-            try:
-                # oneshot() lets psutil reuse one query across these calls.
-                with proc.oneshot():
-                    fixed = static.get(pid)
-                    if fixed is None:
-                        fixed = (proc.name(), parents.get(pid, 0), proc.create_time())
-                        static[pid] = fixed
-                    rss = proc.memory_info().rss
-                    if full or pid not in status_cache:
-                        status_cache[pid] = proc.status()
-            except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
-                continue
-            seen.add(pid)
-            rows.append((pid, fixed[0], fixed[1], fixed[2], rss, status_cache[pid]))
-
-        # Drop cache entries for processes that have exited, so a long live
-        # session cannot grow the dictionaries without bound.
-        for pid in list(static):
-            if pid not in seen:
-                static.pop(pid, None)
-                status_cache.pop(pid, None)
-        return rows, seen
-
-    def _find_issues(self, full=True):
+    def _find_issues(self):
+        """Classify every process: zombie, not responding, suspended, duplicate, orphan or clean."""
         issues      = []
         name_groups = defaultdict(list)
         hung_pids   = get_hung_pids()
         _now        = time.time()
-        rows, _live_pids = self._collect(full)
+        procs, cpu  = self._collect()
+        live_pids   = {pr.pid for pr in procs}
 
-        for row in rows:
-            name_groups[row[1].lower()].append(row)
+        for pr in procs:
+            name_groups[pr.name.lower()].append(pr)
 
-        for name_key, procs in name_groups.items():
-            is_system = name_key in SYSTEM_NAMES
-            count     = len(procs)
-            group_pids = {r[0] for r in procs}
+        for name_key, group in name_groups.items():
+            # Unnamed entries are kernel pseudo-processes; treat them as part of Windows.
+            is_system  = name_key in SYSTEM_NAMES or not name_key
+            count      = len(group)
+            group_pids = {pr.pid for pr in group}
+            kids       = defaultdict(list)          # pid -> its copies started by it
+            for pr in group:
+                if pr.ppid in group_pids:
+                    kids[pr.ppid].append(pr)
 
-            for pid, name, ppid, born, mem, status in procs:
-                if status == psutil.STATUS_ZOMBIE:
-                    issues.append(self._make(
-                        name, pid, mem, 'Zombie', 'zombie', '—', count, is_system))
+            for pr in group:
+                def add(issue, tag, role='—', n=count, app_total=None):
+                    issues.append(self._make(pr.name, pr.pid, pr.memory, issue, tag, role, n,
+                                             is_system, cpu.get(pr.key), app_total))
 
-                elif pid in hung_pids:
-                    issues.append(self._make(
-                        name, pid, mem, 'Not Responding', 'hung', '—', count, is_system))
-
-                elif status == psutil.STATUS_STOPPED:
-                    issues.append(self._make(
-                        name, pid, mem, 'Suspended', 'suspended', '—', count, is_system))
-
+                # No threads left = ended but still held open (a Windows "zombie"). Windows'
+                # own thread-less pseudo-processes (e.g. Secure System) are not problems.
+                if pr.status == procsnap.ZOMBIE and not is_system and pr.pid > 4:
+                    add('Zombie', 'zombie')
+                elif pr.pid in hung_pids:
+                    add('Not Responding', 'hung')
+                elif pr.status == procsnap.STOPPED:
+                    add('Suspended', 'suspended')
                 elif count > 1:
-                    if ppid not in group_pids:
-                        issue, tag, role = 'Dupe · Main', 'dup_main', 'Main'
+                    if pr.ppid not in group_pids:
+                        add('Dupe · Main', 'dup_main', 'Main', app_total=self._family_memory(pr, kids))
                     else:
-                        issue, tag, role = 'Dupe · Child', 'dup_child', 'Child'
-
-                    issues.append(self._make(
-                        name, pid, mem, issue, tag, role, count, is_system))
-
-                elif (not is_system and ppid > 4
-                      and ppid not in _live_pids
-                      and (_now - born) >= 12 * 3600):
-                    issues.append(self._make(
-                        name, pid, mem, 'Orphan', 'orphan', '—', 1, is_system))
-
+                        add('Dupe · Child', 'dup_child', 'Child')
+                elif (not is_system and pr.ppid > 4
+                      and pr.ppid not in live_pids
+                      and (_now - pr.created) >= 12 * 3600):
+                    add('Orphan', 'orphan', n=1)
                 else:
-                    issues.append(self._make(
-                        name, pid, mem, '—', 'clean', '—', 1, is_system))
+                    add('—', 'clean', n=1)
 
         return sorted(issues, key=lambda x: (
             ISSUE_ORDER.get(x['issue'], 99), x['name'].lower()))
 
     @staticmethod
-    def _make(name, pid, mem, issue, tag, role, count, is_system):
+    def _family_memory(root, kids):
+        """APP TOTAL for a main process: its memory plus every copy it started (and theirs).
+        None when it started none: separate copies (e.g. svchost) aren't one app."""
+        if not kids.get(root.pid):
+            return None
+        total, todo = 0, [root]
+        while todo:
+            pr = todo.pop()
+            total += pr.memory
+            todo.extend(kids.get(pr.pid, ()))
+        return total
+
+    @staticmethod
+    def _make(name, pid, mem, issue, tag, role, count, is_system, cpu=None, total=None):
+        """One row of scan results. cpu: % since the last scan (None = not measured yet);
+        total: the whole app's memory, on a duplicate group's main row only."""
         return {
             'name': name, 'pid': pid, 'memory': mem,
             'issue': issue, 'tag': tag, 'role': role,
             'count': count, 'is_system': is_system,
+            'cpu': cpu, 'total': total,
         }
 
     def _scan_done(self, quiet=False):
@@ -1951,10 +1912,12 @@ class RamWarden(tk.Tk):
     # ── Filter & sort ──────────────────────────────────────────────────────────
     @staticmethod
     def _row_values(r):
-        """The six formatted cell strings for one scan record."""
+        """The eight formatted cell strings for one scan record."""
         count = str(r['count']) if 'Dupe' in r['issue'] else '—'
-        return (r['name'], str(r['pid']), fmt_mem(r['memory']),
-                r['issue'], r['role'], count)
+        cpu = '—' if r['cpu'] is None else f"{r['cpu']:.1f}%"
+        total = fmt_mem(r['total']) if r['total'] else '—'
+        return (r['name'], str(r['pid']), fmt_mem(r['memory']), cpu,
+                r['issue'], r['role'], count, total)
 
     def _sort_key(self, r):
         """Sort key for one record, on the stored value not the shown text."""
@@ -1965,6 +1928,10 @@ class RamWarden(tk.Tk):
             return r['pid']
         if col == 'memory':
             return r['memory']
+        if col == 'cpu':
+            return -1 if r['cpu'] is None else r['cpu']
+        if col == 'total':
+            return r['total'] or 0
         if col == 'issue':
             return ISSUE_ORDER.get(r['issue'], 99)
         if col == 'role':
@@ -2085,8 +2052,8 @@ class RamWarden(tk.Tk):
         self._apply_filter()
 
         _labels = {
-            "process": "PROCESS NAME", "pid": "PID", "memory": "MEMORY",
-            "issue": "ISSUE", "role": "ROLE", "instances": "INSTANCES",
+            "process": "PROCESS NAME", "pid": "PID", "memory": "MEMORY", "cpu": "CPU",
+            "issue": "ISSUE", "role": "ROLE", "instances": "INSTANCES", "total": "APP TOTAL",
         }
         for c, label in _labels.items():
             arrow = (" ▲" if not rev else " ▼") if c == col else ""
