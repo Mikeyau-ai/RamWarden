@@ -709,20 +709,6 @@ LIVE_MAX_MS     = 10000
 # the window far. If you raise the frequency, keep the swing small: it was a
 # *large* fast oscillation that flickered, not a fast one.
 # tools/preview_killfx.py imports these to compare profiles side by side.
-# Kill streak. Kills landing within this window of each other accumulate, and
-# the ladder below turns the running total into an announcement. The window
-# restarts on every
-# kill, so a sustained run keeps escalating rather than expiring on a fixed
-# schedule. Counted per process, not per click — killing three at once is a
-# multi kill by any reasonable reading — but announced only once per action.
-KILL_STREAK_WINDOW = 10.0  # seconds
-# Thresholds, highest first: the streak earns the first line it reaches or
-# exceeds, and anything below the smallest is announced with the gunshot alone.
-# Adding a rung is one clip in assets/sfx plus one entry here.
-STREAK_LINES = ((5, 'monster'), (4, 'ultra'), (3, 'multi'), (2, 'double'))
-# winsound plays one clip at a time, so the announcer waits for the gunshot to
-# get out of the way instead of cutting it off.
-STREAK_DELAY_MS    = 750
 
 SHAKE_PX        = 4        # peak horizontal offset of the recoil; 0 disables it
 SHAKE_MS        = 16       # per frame — one frame at 60Hz
@@ -838,8 +824,6 @@ class RamWarden(tk.Tk):
         self._row_tags      = {}   # iid → tag tuple last written to the tree
         self._dying         = set()   # iids mid kill-animation, not yet removed
         self._shaking       = False
-        self._streak        = 0     # kills inside the current window
-        self._last_kill     = 0.0   # monotonic clock of the last kill
         self._filter_pending = False  # a refresh held back by a running animation
         self._logo_img      = None      # kept alive; Tk does not own PhotoImages
         self._init_style()
@@ -1461,29 +1445,6 @@ class RamWarden(tk.Tk):
             self.after(SHAKE_MS, step, i + 1)
 
         step()
-
-    def _register_kills(self, killed):
-        """Advance the kill streak, returning 'double', 'multi', or None.
-
-        The window is measured from the previous kill rather than from the
-        start of the run, so a steady stream of kills keeps the streak alive
-        for as long as it is sustained.
-        """
-        now = time.monotonic()
-        if now - self._last_kill > KILL_STREAK_WINDOW:
-            self._streak = 0          # the run went cold; start again
-        self._last_kill = now
-        self._streak += killed
-        for threshold, level in STREAK_LINES:
-            if self._streak >= threshold:
-                return level
-        return None
-
-    def _announce_streak(self, killed):
-        """Play the streak line for this kill, if it earned one."""
-        level = self._register_kills(killed)
-        if level:
-            self.after(STREAK_DELAY_MS, sounds.play_streak, level)
 
     def _start_kill_anim(self, iid):
         """Mark a killed row as dying and begin its blink/fade."""
@@ -2339,7 +2300,7 @@ class RamWarden(tk.Tk):
             except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
                 failed.append(f"PID {iid}: {e}")
 
-        # Audible outcome. A deflection takes priority over the gunshot: on a
+        # Audible outcome. A refusal takes priority over the close tick: on a
         # partial kill the refusal is the part worth hearing, and winsound
         # plays one clip at a time anyway.
         if failed:
@@ -2347,7 +2308,6 @@ class RamWarden(tk.Tk):
         elif killed:
             sounds.play_kill()
             self._shake()
-            self._announce_streak(killed)
 
         killed_pids       = {int(iid) for iid in sel}
         self._all_results = [r for r in self._all_results if r['pid'] not in killed_pids]
@@ -2413,7 +2373,7 @@ class RamWarden(tk.Tk):
             except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
                 failed.append(f"PID {iid}: {e}")
 
-        # Audible outcome. A deflection takes priority over the gunshot: on a
+        # Audible outcome. A refusal takes priority over the close tick: on a
         # partial kill the refusal is the part worth hearing, and winsound
         # plays one clip at a time anyway.
         if failed:
@@ -2421,7 +2381,6 @@ class RamWarden(tk.Tk):
         elif killed:
             sounds.play_kill()
             self._shake()
-            self._announce_streak(killed)
 
         killed_pids       = {int(iid) for iid in child_iids}
         self._all_results = [r for r in self._all_results if r['pid'] not in killed_pids]

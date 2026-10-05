@@ -9,6 +9,9 @@ ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
 ## Unreleased (licensing; not published yet)
+- **No more gunshots or voice lines.** Closing a process plays a soft short tick, and a refused
+  close a muted low thunk; both are plain synthesised tones (`tools/generate_ui_sounds.py`).
+  The kill-streak announcer and its streak counting are gone, with the ElevenLabs clips.
 - **Renamed RamBo -> RamWarden** (the old name is a registered film trademark). Window, installer,
   exe, settings folder (`%LOCALAPPDATA%\RamWarden`), licence product and codes (RAMWARDEN-...)
   all follow; the installer AppId is unchanged so it upgrades an existing RamBo install.

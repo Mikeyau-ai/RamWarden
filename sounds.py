@@ -1,31 +1,23 @@
 """
-sounds.py — kill-feedback audio for RamWarden.
+sounds.py: RamWarden's two UI sounds.
 
-A gunshot when a process actually dies, a ricochet when it survives, so the
-outcome of a kill is audible without reading the status bar.
+A soft tick when a process closes, a muted low thunk when Windows refuses (or it was already
+gone), so the outcome is audible without reading the status bar. Both are plain synthesised
+tones made by tools/generate_ui_sounds.py (they replaced gunshots and a kill-streak announcer).
 
 Stdlib only: winsound ships with CPython on Windows and plays a 16-bit PCM
-WAV asynchronously, which is all this needs. No mixer, no extra dependency,
-nothing new in the PyInstaller bundle beyond the WAV files themselves.
+WAV asynchronously, which is all this needs.
 
-Public API: play_kill(), play_blocked(), play_streak().
+Public API: play_kill(), play_blocked().
 """
 import os
 import random
 import sys
 import winsound
 
-# Several takes per outcome, chosen at random, so killing a dozen processes
-# does not turn into the same click repeating.
 _VARIANTS = {
-    'kill':    ('Gunshot_01.wav', 'Gunshot_02.wav', 'Gunshot_03.wav'),
-    'blocked': ('Ricochet_01.wav', 'Ricochet_02.wav', 'Ricochet_03.wav'),
-    # One take each. An announcer is meant to be recognisable, so unlike the
-    # gunshots these deliberately do not vary.
-    'double':  ('DoubleKill.wav',),
-    'multi':   ('MultiKill.wav',),
-    'ultra':   ('UltraKill.wav',),
-    'monster': ('MonsterKill.wav',),
+    'kill':    ('Close.wav',),
+    'blocked': ('Blocked.wav',),
 }
 
 # Last variant played per group, so the same take is never heard twice running.
@@ -65,19 +57,11 @@ def _play(group):
 
 
 def play_kill():
-    """Gunshot — one or more processes were successfully killed."""
+    """Soft tick: one or more processes were closed."""
     _play('kill')
 
 
 def play_blocked():
-    """Ricochet — the kill was refused, denied, or the process was already gone."""
+    """Muted thunk: the kill was refused, denied, or the process was already gone."""
     _play('blocked')
 
-
-def play_streak(level):
-    """Announce a kill streak. `level` is 'double' or 'multi'.
-
-    Called on a delay rather than straight after the gunshot: winsound plays
-    one sound at a time, so an immediate second call would cut the gunshot off
-    mid-shot instead of layering over it."""
-    _play(level)
