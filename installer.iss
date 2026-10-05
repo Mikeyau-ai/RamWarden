@@ -1,9 +1,9 @@
-; installer.iss — Inno Setup script for RamBo.
+; installer.iss — Inno Setup script for RamWarden.
 ;
-; Wraps the PyInstaller one-dir build (dist\RamBo\) into dist\RamBo-Setup.exe.
+; Wraps the PyInstaller one-dir build (dist\RamWarden\) into dist\RamWarden-Setup.exe.
 ; Everything the app needs, including the embedded CPython runtime and
 ; python3xx.dll, is installed to a real directory — which is the whole point:
-; a zip lets Explorer "run" RamBo.exe straight out of the archive, where
+; a zip lets Explorer "run" RamWarden.exe straight out of the archive, where
 ; _internal\ was never extracted and loading the Python DLL fails.
 ;
 ; Built by build_installer.py, which supplies AppVersion from main.pyw.
@@ -12,9 +12,9 @@
   #define AppVersion "0.0.0"
 #endif
 
-#define AppName "RamBo"
+#define AppName "RamWarden"
 #define AppPublisher "Mikey"
-#define AppExe "RamBo.exe"
+#define AppExe "RamWarden.exe"
 
 [Setup]
 ; Never change AppId — it is what lets a new setup upgrade an existing
@@ -39,17 +39,17 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 OutputDir=dist
-OutputBaseFilename=RamBo-Setup
+OutputBaseFilename=RamWarden-Setup
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\{#AppExe}
-; Without this, Apps & Features lists it as "RamBo version 1.0.0" even though
+; Without this, Apps & Features lists it as "RamWarden version 1.0.0" even though
 ; it already shows the version in its own column.
 UninstallDisplayName={#AppName}
 WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
 
-; Use the Restart Manager to shut down a running RamBo before overwriting it,
+; Use the Restart Manager to shut down a running RamWarden before overwriting it,
 ; rather than failing mid-copy or demanding a reboot.
 CloseApplications=yes
 RestartApplications=no
@@ -59,14 +59,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 ; Ticked by default — the desktop icon is how most people will actually launch
-; RamBo — but it is a task rather than a fixed [Icons] entry so it can be
+; RamWarden — but it is a task rather than a fixed [Icons] entry so it can be
 ; unticked. Inno records the choice under the uninstall key and restores it on
 ; the next run, so a silent self-update honours an earlier opt-out instead of
 ; quietly putting the icon back.
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; The entire one-dir bundle: RamBo.exe plus _internal\ (python3xx.dll, the
+; The entire one-dir bundle: RamWarden.exe plus _internal\ (python3xx.dll, the
 ; stdlib zip, psutil, Tcl/Tk, and the bundled icon/logo).
 Source: "dist\{#AppName}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -79,7 +79,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 ; No `skipifsilent` — updater.py runs this installer with /SILENT and then
-; exits, so this entry is what relaunches RamBo once the update finishes.
+; exits, so this entry is what relaunches RamWarden once the update finishes.
 ; Adding skipifsilent back would leave the user staring at a closed app.
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall
 

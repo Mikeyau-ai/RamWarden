@@ -314,7 +314,7 @@ class AboutWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
         self._app = app
-        self.title("About RamBo")
+        self.title("About RamWarden")
         self.geometry("620x640")
         self.minsize(460, 420)
         self.configure(bg=C['bg'])
@@ -337,14 +337,14 @@ class AboutWindow(tk.Toplevel):
         head.pack(fill=tk.X)
         line = tk.Frame(head, bg=C['panel'])
         line.pack(anchor=tk.W)
-        tk.Label(line, text="RAMBO", font=("Consolas", 21, "bold"),
+        tk.Label(line, text="RAMWARDEN", font=("Consolas", 21, "bold"),
                  bg=C['panel'], fg=C['green']).pack(side=tk.LEFT, anchor=tk.S)
         # Say plainly when this is a dev run: the updater is inert from source,
         # so "no updates" there means something different.
         suffix = "" if getattr(sys, 'frozen', False) else "   (running from source)"
         tk.Label(line, text="  v" + APP_VERSION + suffix, font=FONT_UI,
                  bg=C['panel'], fg=C['dim']).pack(side=tk.LEFT, anchor=tk.S, pady=4)
-        tk.Label(head, text="Windows RAM & process cleaner   ·   by Mikey",
+        tk.Label(head, text="Windows RAM & process manager   ·   by Sixth Day Studios",
                  font=FONT_UI, bg=C['panel'], fg=C['dimmer']).pack(
             anchor=tk.W, pady=(4, 0))
 
@@ -466,14 +466,14 @@ class AboutWindow(tk.Toplevel):
 
 
 class LicenceWindow(tk.Toplevel):
-    """Trial / licence window: shows where this PC stands, and activates RamBo by
+    """Trial / licence window: shows where this PC stands, and activates RamWarden by
     "Sign in" (approve at sixthdaystudios.com/link) or a product code. Network calls run
     on worker threads; results come back to Tk through after()."""
 
     _MESSAGES = {
-        "trial_over": "Your 14-day trial has ended. RamBo still scans and shows everything; "
+        "trial_over": "Your 14-day trial has ended. RamWarden still scans and shows everything; "
                       "activate it to kill, trim and manage startup again.",
-        "check_needed": "RamBo needs to check its licence online. Connect to the internet and "
+        "check_needed": "RamWarden needs to check its licence online. Connect to the internet and "
                         "reopen this window, or activate below.",
     }
 
@@ -481,7 +481,7 @@ class LicenceWindow(tk.Toplevel):
         super().__init__(app)
         self._app = app
         self._poll = None                 # the pending "Sign in" request, if any
-        self.title("RamBo licence")
+        self.title("RamWarden licence")
         self.geometry("540x360")
         self.minsize(460, 330)
         self.configure(bg=C['bg'])
@@ -509,10 +509,10 @@ class LicenceWindow(tk.Toplevel):
         for w in self._body.winfo_children():
             w.destroy()
         st = licence.status()
-        tk.Label(self._body, text="RAMBO LICENCE", font=("Consolas", 16, "bold"),
+        tk.Label(self._body, text="RAMWARDEN LICENCE", font=("Consolas", 16, "bold"),
                  bg=C['bg'], fg=C['green']).pack(anchor=tk.W)
         if st["state"] == "licensed":
-            self._label("RamBo is activated on this PC. Thanks for supporting it!", pady=(10, 4))
+            self._label("RamWarden is activated on this PC. Thanks for supporting it!", pady=(10, 4))
             self._label("Manage your PCs (up to 3) at sixthdaystudios.com/apps.", fg=C['dim'])
             row = tk.Frame(self._body, bg=C['bg'])
             row.pack(anchor=tk.W, pady=14)
@@ -528,19 +528,19 @@ class LicenceWindow(tk.Toplevel):
                 self._label(self._MESSAGES[st["state"]], fg=C['yellow'] if locked else C['text'], pady=(10, 4))
             self._label("Full version: A$14.95 one-off (about US$9.99), up to 3 PCs, all future "
                         "updates included.", fg=C['text'], pady=(6, 0))
-            self._label("Bought RamBo? Sign in with your Sixth Day Studios account, or enter your "
+            self._label("Bought RamWarden? Sign in with your Sixth Day Studios account, or enter your "
                         "product code.", fg=C['dim'], pady=(6, 0))
             row = tk.Frame(self._body, bg=C['bg'])
             row.pack(anchor=tk.W, pady=(12, 6))
             self._app._mk_btn(row, "  SIGN IN  ", self._sign_in, C['green']).pack(side=tk.LEFT)
-            self._app._mk_btn(row, "  BUY RAMBO · A$14.95  ", lambda: webbrowser.open(licence.SITE + "/rambo"),
+            self._app._mk_btn(row, "  BUY RAMWARDEN · A$14.95  ", lambda: webbrowser.open(licence.SITE + "/ramwarden"),
                               C['btn_off']).pack(side=tk.LEFT, padx=8)
             code_row = tk.Frame(self._body, bg=C['bg'])
             code_row.pack(fill=tk.X, pady=(10, 0))
             self._code = tk.Entry(code_row, font=FONT_DATA, bg=C['row'], fg=C['text'],
                                   insertbackground=C['text'], relief=tk.FLAT, width=30)
             self._code.pack(side=tk.LEFT, ipady=6, padx=(0, 8))
-            self._code.insert(0, "RAMBO-")
+            self._code.insert(0, "RAMWARDEN-")
             self._code.bind("<Return>", lambda _: self._activate())
             self._app._mk_btn(code_row, "  ACTIVATE CODE  ", self._activate, C['blue']).pack(side=tk.LEFT)
         self._msg = self._label("", fg=C['dim'], pady=(12, 0))
@@ -568,7 +568,7 @@ class LicenceWindow(tk.Toplevel):
     def _activate(self):
         """Redeem the typed product code."""
         code = self._code.get().strip()
-        if len(code.replace("RAMBO-", "")) < 8:
+        if len(code.replace("RAMWARDEN-", "")) < 8:
             self._say("Enter the product code from your purchase email or Your apps page.", C['yellow'])
             return
         self._say("Checking your code…")
@@ -612,9 +612,9 @@ class LicenceWindow(tk.Toplevel):
         self._in_background(lambda: licence.link_poll(poll), checked)
 
     def _deactivate(self):
-        """Free this PC's slot (moving RamBo to another PC)."""
+        """Free this PC's slot (moving RamWarden to another PC)."""
         if not messagebox.askyesno("Deactivate this PC?",
-                                   "RamBo will go back to trial rules on this PC, and the slot is freed "
+                                   "RamWarden will go back to trial rules on this PC, and the slot is freed "
                                    "for another PC. Continue?", parent=self):
             return
         self._say("Deactivating…")
@@ -811,10 +811,10 @@ def trim_process(pid: int) -> int:
 
 
 # ── App ────────────────────────────────────────────────────────────────────────
-class RamBo(tk.Tk):
+class RamWarden(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("RamBo")
+        self.title("RamWarden")
         self.geometry("1104x600")
         self.configure(bg=C['bg'])
         self.minsize(828, 440)
@@ -956,10 +956,10 @@ class RamBo(tk.Tk):
 
         wordmark = tk.Frame(bar, bg=C['bg'])
         wordmark.pack(side=tk.LEFT)
-        mark = tk.Label(wordmark, text="RAMBO", font=("Consolas", 21, "bold"),
+        mark = tk.Label(wordmark, text="RAMWARDEN", font=("Consolas", 21, "bold"),
                         bg=C['bg'], fg=C['green'])
         mark.pack(side=tk.LEFT, anchor=tk.S)
-        tag = tk.Label(wordmark, text="  RAM & Process Cleaner", font=FONT_UI,
+        tag = tk.Label(wordmark, text="  RAM & Process Manager", font=FONT_UI,
                        bg=C['bg'], fg=C['dim'])
         tag.pack(side=tk.LEFT, anchor=tk.S, pady=4)
         ver = tk.Label(wordmark, text="  v" + APP_VERSION, font=FONT_UI,
@@ -1112,10 +1112,10 @@ class RamBo(tk.Tk):
         notes = "\n".join("  • " + line for line in info.note_lines())
         choice = messagebox.askyesnocancel(
             "Update available",
-            f"RamBo v{info.version} is available "
+            f"RamWarden v{info.version} is available "
             f"(you have v{APP_VERSION}).\n\n"
             f"{notes}\n\n"
-            f"Install it now? RamBo will download {info.size_mb:.1f} MB, "
+            f"Install it now? RamWarden will download {info.size_mb:.1f} MB, "
             f"update itself and reopen — no further prompts.\n\n"
             f"No skips this version. Cancel asks again next launch.",
             icon="info", parent=self)
@@ -1187,7 +1187,7 @@ class RamBo(tk.Tk):
                     "Update blocked",
                     "The downloaded installer disappeared before it could run.\n\n"
                     "Antivirus software usually causes this. Allow "
-                    "RamBo-Setup.exe, or install the update by hand from the "
+                    "RamWarden-Setup.exe, or install the update by hand from the "
                     "releases page.",
                     parent=self)
             return
@@ -1200,7 +1200,7 @@ class RamBo(tk.Tk):
                               if self._update_info else updater.current_version())
         if updater.run_installer(path):
             # The installer needs this process gone before it can replace the
-            # files; its [Run] entry relaunches RamBo when it finishes.
+            # files; its [Run] entry relaunches RamWarden when it finishes.
             self.destroy()
             return
         self._show_update_button()
@@ -1213,7 +1213,7 @@ class RamBo(tk.Tk):
         """Restart elevated so kills and startup edits stop hitting AccessDenied."""
         if not messagebox.askyesno(
                 "Restart as administrator",
-                "RamBo will close and reopen with administrator rights.\n\n"
+                "RamWarden will close and reopen with administrator rights.\n\n"
                 "Without them, terminating system-owned processes and changing "
                 "protected startup entries will fail.\n\nContinue?",
                 icon="question", parent=self):
@@ -2487,5 +2487,5 @@ class RamBo(tk.Tk):
 
 
 if __name__ == "__main__":
-    app = RamBo()
+    app = RamWarden()
     app.mainloop()

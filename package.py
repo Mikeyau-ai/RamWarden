@@ -9,8 +9,8 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DIST_DIR = os.path.join(HERE, 'dist', 'RamBo')
-SETUP_PATH = os.path.join(HERE, 'dist', 'RamBo-Setup.exe')
+DIST_DIR = os.path.join(HERE, 'dist', 'RamWarden')
+SETUP_PATH = os.path.join(HERE, 'dist', 'RamWarden-Setup.exe')
 
 
 def get_version():

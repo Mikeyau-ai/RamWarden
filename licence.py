@@ -1,17 +1,17 @@
-"""RamBo's licence: a 14-day trial, then a licence from sixthdaystudios.com.
+"""RamWarden's licence: a 14-day trial, then a licence from sixthdaystudios.com.
 
-Stdlib only, like updater.py. The site signs small tokens with its private key; RamBo
+Stdlib only, like updater.py. The site signs small tokens with its private key; RamWarden
 checks them with PUBLIC_KEY below (ed25519.py), so a token can't be forged or edited.
 Tokens are tied to this PC (a hash of Windows' MachineGuid, never the raw id).
 
   - Trial: started by the site on first launch (one per PC, so reinstalling doesn't
-    reset it). If the site can't be reached at all, RamBo allows OFFLINE_GRACE_DAYS from
+    reset it). If the site can't be reached at all, RamWarden allows OFFLINE_GRACE_DAYS from
     the first launch instead.
   - Licence: from a product code, or "Sign in" (the site's /link page approves this PC).
-    A licence token lasts 60 days and is refreshed in the background whenever RamBo is
+    A licence token lasts 60 days and is refreshed in the background whenever RamWarden is
     online, so it works offline and a refunded/removed licence stops at the next refresh.
 
-Locked (trial over, no licence): RamBo still scans and shows everything; only the actions
+Locked (trial over, no licence): RamWarden still scans and shows everything; only the actions
 that change the system (kill, trim, startup on/off) ask for a licence. See main.pyw.
 """
 import base64
@@ -28,7 +28,7 @@ import ed25519
 from updater import USER_ROOT
 
 SITE = "https://sixthdaystudios.com"
-PRODUCT = "rambo"
+PRODUCT = "ramwarden"
 # The sixthdaystudios.com licence signing key (public half; the private half is a server secret).
 PUBLIC_KEY = base64.urlsafe_b64decode("dvVn29Gb2x5o8_00kW65ueD0vC7NU1SYZD_nm14Tu08=")
 OFFLINE_GRACE_DAYS = 14          # only used if the site has never been reachable
@@ -121,7 +121,7 @@ def status(now=None):
 
 
 def allowed(now=None):
-    """True when the licence/trial lets RamBo change the system (kill, trim, startup)."""
+    """True when the licence/trial lets RamWarden change the system (kill, trim, startup)."""
     return status(now)["state"] in ("licensed", "trial")
 
 
@@ -129,7 +129,7 @@ def allowed(now=None):
 def _post(path, body):
     """POST JSON to the site; (http status, reply dict), or (None, {}) when offline."""
     req = urllib.request.Request(f"{SITE}/api/{path}", data=json.dumps(body).encode(),
-                                 headers={"Content-Type": "application/json", "User-Agent": "RamBo-Licence"})
+                                 headers={"Content-Type": "application/json", "User-Agent": "RamWarden-Licence"})
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
             return resp.status, json.loads(resp.read() or b"{}")
@@ -191,7 +191,7 @@ def activate_code(code):
     if status_code is None:
         return False, "Couldn't reach sixthdaystudios.com. Check your internet connection and try again."
     if r.get("token") and _keep(r["token"]):
-        return True, "Activated. Thanks for supporting RamBo!"
+        return True, "Activated. Thanks for supporting RamWarden!"
     return False, r.get("error") or "That didn't work. Please try again."
 
 
@@ -209,12 +209,12 @@ def link_poll(poll):
     if status_code is None or r.get("pending"):
         return "pending", ""                 # offline blips just mean "keep waiting"
     if r.get("token") and _keep(r["token"]):
-        return "ok", "Signed in and activated. Thanks for supporting RamBo!"
+        return "ok", "Signed in and activated. Thanks for supporting RamWarden!"
     return "error", r.get("error") or "That didn't work. Please try again."
 
 
 def deactivate():
-    """Free this PC's licence slot (to move RamBo to another PC): (True, msg) or (False, why)."""
+    """Free this PC's licence slot (to move RamWarden to another PC): (True, msg) or (False, why)."""
     data = _load()
     if not read_token(data.get("token")):
         return False, "This PC isn't activated."

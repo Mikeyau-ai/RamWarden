@@ -1,7 +1,7 @@
 """
 Standalone preview of the kill feedback: window shake + row blink/fade.
 
-Nothing here is wired into RamBo. Run it, pick rows, hit KILL, and compare the
+Nothing here is wired into RamWarden. Run it, pick rows, hit KILL, and compare the
 three presets; whichever numbers feel right get folded into main.pyw.
 
     python tools/preview_killfx.py
@@ -23,14 +23,14 @@ import sounds                                    # noqa: E402  real kill audio
 # app used SetWindowPos — so the preview was never showing what shipped. Import
 # it instead, and move the window exactly the way the app does.
 _spec = importlib.util.spec_from_loader(
-    'rambomain', importlib.machinery.SourceFileLoader(
-        'rambomain', os.path.join(os.path.dirname(os.path.dirname(
+    'ramwardenmain', importlib.machinery.SourceFileLoader(
+        'ramwardenmain', os.path.join(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))), 'main.pyw')))
 _app_mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_app_mod)
 shake_path = _app_mod.shake_path
 
-# RamBo's palette and row styling, copied so the preview looks like the app.
+# RamWarden's palette and row styling, copied so the preview looks like the app.
 C = {
     'bg': '#121212', 'panel': '#1a1a1a', 'row': '#1f1f1f', 'row_alt': '#272727',
     'border': '#2e2e2e', 'text': '#dcdcdc', 'dim': '#6b6b6b', 'dimmer': '#4a4a4a',
@@ -82,7 +82,7 @@ def lerp(a, b, t):
 class Preview(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("RamBo — kill FX preview")
+        self.title("RamWarden — kill FX preview")
         self.geometry("760x420+300+220")
         self.configure(bg=C['bg'])
         self._dying = set()
@@ -238,7 +238,7 @@ class Preview(tk.Tk):
         xs = [p[0] for p in shake_path(amp, frames, cycles, decay)]
         flips = sum(1 for a, b in zip(xs, xs[1:]) if a * b < 0)
         span = len(xs) * _app_mod.SHAKE_MS
-        self.title(f"RamBo — kill FX   {self.preset.get()}: "
+        self.title(f"RamWarden — kill FX   {self.preset.get()}: "
                    f"swing {max(xs) - min(xs)}px, "
                    f"{flips / (span / 1000) / 2:.1f}Hz, {span}ms")
 

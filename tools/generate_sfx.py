@@ -1,10 +1,10 @@
-"""Generate RamBo's kill-feedback sound effects via the ElevenLabs API.
+"""Generate RamWarden's kill-feedback sound effects via the ElevenLabs API.
 
 Writes 44100 Hz mono 16-bit WAV into assets/sfx/, which is the format
 winsound.PlaySound wants and what sounds.py loads at runtime.
 
 Build-time only — the generated WAVs are committed, so nothing here ships
-inside the app and RamBo keeps its stdlib-plus-psutil runtime.
+inside the app and RamWarden keeps its stdlib-plus-psutil runtime.
 
   python tools/generate_sfx.py            # dry run: prints the plan and cost
   python tools/generate_sfx.py --go       # actually spend credits

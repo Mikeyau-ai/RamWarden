@@ -22,7 +22,7 @@ b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()
 NOW = time.time()
 
 
-def token(kind, exp, device=None, product="rambo", iat=None, seed=SEED):
+def token(kind, exp, device=None, product="ramwarden", iat=None, seed=SEED):
     """A token signed the way the site signs them."""
     body = b64(json.dumps({"v": 1, "k": kind, "p": product, "l": 7, "d": device or licence.device_id(),
                            "iat": iat or NOW, "exp": exp}).encode())
@@ -82,7 +82,7 @@ def test_forged_wrong_pc_and_wrong_product_tokens_are_ignored():
 def test_code_activation_and_licensed_state():
     good = token("licence", NOW + 60 * 86400)
     fresh(site=FakeSite({"licence/activate": (200, {"token": good})}))
-    ok, _ = licence.activate_code("RAMBO-AAAA")
+    ok, _ = licence.activate_code("RAMWARDEN-AAAA")
     assert ok and licence.status(NOW) == {"state": "licensed", "days_left": 60}
     fresh(site=FakeSite({"licence/activate": (404, {"error": "That code isn't right."})}))
     assert licence.activate_code("nope") == (False, "That code isn't right.")

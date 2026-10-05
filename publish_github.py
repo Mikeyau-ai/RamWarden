@@ -3,14 +3,14 @@ Publish the built app as a GitHub release asset.
 
 The download link people use is:
 
-    https://github.com/<owner>/<repo>/releases/latest/download/RamBo-Setup.exe
+    https://github.com/<owner>/<repo>/releases/latest/download/RamWarden-Setup.exe
 
 That URL is permanent and always resolves to the newest release, so it can be
 posted once and never revisited. Bumping APP_VERSION in main.pyw and rebuilding
 is all it takes to update what that link serves.
 
 The installer is the only asset. Releases up to v1.1.0 also carried a plain
-RamBo.zip, which is what the pre-installer updater downloaded; every build from
+RamWarden.zip, which is what the pre-installer updater downloaded; every build from
 v1.1.0 on updates through the installer instead, so the archive has no
 remaining consumer. v1.1.0 keeps its copy so anything still on the old scheme
 has a way forward.
@@ -51,7 +51,7 @@ def check_prerequisites():
                 '-q', '.nameWithOwner'])
     if view.returncode != 0:
         print("  No GitHub remote for this directory. Create one with:\n"
-              "    gh repo create RamBo --public --source=. --push")
+              "    gh repo create RamWarden --public --source=. --push")
         return False
 
     # A mismatch here means shipped builds would check a different repo for
@@ -98,7 +98,7 @@ def build_notes(tag):
     return (
         f"## What's new\n\n{changelog(tag)}\n\n"
         "---\n\n"
-        "Download `RamBo-Setup.exe` and run it. It installs for the current "
+        "Download `RamWarden-Setup.exe` and run it. It installs for the current "
         "user only, so there is no admin prompt, and it adds a Start Menu "
         "entry plus an uninstaller.\n\n"
         "The installer is unsigned, so Windows SmartScreen will show "
@@ -135,7 +135,7 @@ def publish(tag, assets):
             return False
     else:
         created = run(['release', 'create', tag, *assets,
-                       '--title', f'RamBo {tag}', '--notes', notes])
+                       '--title', f'RamWarden {tag}', '--notes', notes])
         if created.returncode != 0:
             # Report the real reason rather than assuming the tag existed.
             print("  " + (created.stderr.strip() or 'gh release create failed'))
@@ -145,7 +145,7 @@ def publish(tag, assets):
     view = run(['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'])
     slug = view.stdout.strip()
     print("\n  Permanent download link (paste this into Discord):")
-    print(f"  https://github.com/{slug}/releases/latest/download/RamBo-Setup.exe")
+    print(f"  https://github.com/{slug}/releases/latest/download/RamWarden-Setup.exe")
     print("\n  Release page:")
     print(f"  https://github.com/{slug}/releases/latest\n")
     return True

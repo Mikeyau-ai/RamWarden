@@ -2,7 +2,7 @@
 setlocal
 
 echo.
-echo  Building RamBo...
+echo  Building RamWarden...
 echo.
 
 :: Clean previous build
@@ -15,7 +15,7 @@ if exist dist  rmdir /s /q dist
 python -m PyInstaller ^
   --onedir ^
   --windowed ^
-  --name RamBo ^
+  --name RamWarden ^
   --icon icon.ico ^
   --add-data "icon.ico;." ^
   --add-data "logo.png;." ^
@@ -34,10 +34,10 @@ if errorlevel 1 (
 )
 
 echo.
-echo  Built dist\RamBo\RamBo.exe
+echo  Built dist\RamWarden\RamWarden.exe
 
 :: Wrap the one-dir bundle in a real installer. This is what people download:
-:: a zip lets Explorer launch RamBo.exe from inside the archive, where
+:: a zip lets Explorer launch RamWarden.exe from inside the archive, where
 :: _internal\ was never extracted and loading python3xx.dll fails.
 echo.
 echo  Building installer...

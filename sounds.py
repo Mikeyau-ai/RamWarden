@@ -1,5 +1,5 @@
 """
-sounds.py — kill-feedback audio for RamBo.
+sounds.py — kill-feedback audio for RamWarden.
 
 A gunshot when a process actually dies, a ricochet when it survives, so the
 outcome of a kill is audible without reading the status bar.

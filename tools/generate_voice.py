@@ -1,4 +1,4 @@
-"""Generate RamBo's kill-streak announcer lines via ElevenLabs text-to-speech.
+"""Generate RamWarden's kill-streak announcer lines via ElevenLabs text-to-speech.
 
 Separate from generate_sfx.py because this is a different endpoint: the sound
 effects come from /v1/sound-generation, spoken lines from /v1/text-to-speech.

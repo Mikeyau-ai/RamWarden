@@ -9,6 +9,10 @@ ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
 ## Unreleased (licensing; not published yet)
+- **Renamed RamBo -> RamWarden** (the old name is a registered film trademark). Window, installer,
+  exe, settings folder (`%LOCALAPPDATA%\RamWarden`), licence product and codes (RAMWARDEN-...)
+  all follow; the installer AppId is unchanged so it upgrades an existing RamBo install.
+  New icon to come.
 - RamBo becomes a paid app from sixthdaystudios.com, with a 14-day free trial per PC
   (reinstalling doesn't reset it). After the trial RamBo still scans and shows everything;
   kill, trim and startup on/off ask for a licence.

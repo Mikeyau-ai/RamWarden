@@ -1,5 +1,5 @@
 """
-Compile installer.iss into dist/RamBo-Setup.exe.
+Compile installer.iss into dist/RamWarden-Setup.exe.
 
 Kept separate from build.bat so the version in main.pyw stays the single
 source of truth: it is read here and passed to the compiler as /DAppVersion,

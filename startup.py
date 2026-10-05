@@ -1,5 +1,5 @@
 """
-startup.py — Windows startup entry scanner and toggler for RamBo.
+startup.py — Windows startup entry scanner and toggler for RamWarden.
 No tkinter dependency. Public API: scan_startup(), set_enabled(), StartupAccessError.
 """
 import os

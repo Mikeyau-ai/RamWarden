@@ -1,8 +1,8 @@
 """Ed25519 signatures (RFC 8032) in plain Python, so licence checks need no extra package.
 
-RamBo is stdlib-only by design (see requirements.txt), so this is a small reference
+RamWarden is stdlib-only by design (see requirements.txt), so this is a small reference
 implementation rather than a dependency. It is not constant-time, which doesn't matter
-here: RamBo only ever *verifies* public licence signatures. Signing happens on the
+here: RamWarden only ever *verifies* public licence signatures. Signing happens on the
 sixthdaystudios.com server with the private key; sign() exists for tests and key setup.
 """
 import hashlib

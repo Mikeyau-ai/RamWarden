@@ -1,13 +1,13 @@
 """
-updater.py — self-update for installed (frozen) RamBo builds.
+updater.py — self-update for installed (frozen) RamWarden builds.
 
-Checks GitHub Releases for a newer RamBo-Setup.exe, downloads it, then runs it
-silently and exits. The freshly-installed build relaunches RamBo itself, via
+Checks GitHub Releases for a newer RamWarden-Setup.exe, downloads it, then runs it
+silently and exits. The freshly-installed build relaunches RamWarden itself, via
 the installer.iss [Run] entry — the `skipifsilent` flag is deliberately absent
 there so a /SILENT install still launches the app at the end.
 
 This replaced an older scheme that unzipped a release over the install
-directory with robocopy. That was right while RamBo shipped as a portable zip,
+directory with robocopy. That was right while RamWarden shipped as a portable zip,
 but it is wrong for an installed build: it leaves the version in Apps &
 Features stale and writes files the uninstaller has no record of. Letting Inno
 Setup perform the upgrade keeps the install self-consistent.
@@ -35,14 +35,14 @@ from pathlib import Path
 # The public GitHub repo whose Releases host the build. Must be PUBLIC — the
 # client checks anonymously and a private repo 404s without a token.
 # publish_github.py imports this so there's a single source of truth.
-GITHUB_REPO = os.getenv('RAMBO_UPDATE_REPO', 'Mikeyau-ai/Rambo')
+GITHUB_REPO = os.getenv('RAMWARDEN_UPDATE_REPO', 'Mikeyau-ai/RamWarden')
 
 _API_LATEST = f'https://api.github.com/repos/{GITHUB_REPO}/releases/latest'
-_ASSET_NAME = 'RamBo-Setup.exe'
-_USER_AGENT = 'RamBo-Updater'
+_ASSET_NAME = 'RamWarden-Setup.exe'
+_USER_AGENT = 'RamWarden-Updater'
 _CHECK_TIMEOUT = 8      # seconds — backgrounded, but don't hang forever
 
-USER_ROOT = Path(os.getenv('LOCALAPPDATA', Path.home())) / 'RamBo'
+USER_ROOT = Path(os.getenv('LOCALAPPDATA', Path.home())) / 'RamWarden'
 _UPDATE_DIR = USER_ROOT / 'updates'
 _SETTINGS = USER_ROOT / 'settings.json'
 
@@ -91,12 +91,12 @@ def current_version():
 
 
 def install_dir():
-    """The directory holding RamBo.exe (only meaningful in a frozen build)."""
+    """The directory holding RamWarden.exe (only meaningful in a frozen build)."""
     return Path(sys.executable).resolve().parent
 
 
 def is_store_install():
-    """True when RamBo runs as its Microsoft Store (MSIX) package. The Store signs it and
+    """True when RamWarden runs as its Microsoft Store (MSIX) package. The Store signs it and
     delivers updates itself, so the GitHub self-updater must stay off (Store policy)."""
     try:
         length = ctypes.c_uint32(0)
@@ -270,11 +270,11 @@ def download(info, progress_cb=None, cancel=None):
     `cancel()` is polled per chunk, so the UI can show progress and bail out.
     Leaves no partial download behind."""
     _UPDATE_DIR.mkdir(parents=True, exist_ok=True)
-    dest = _UPDATE_DIR / f'RamBo-Setup-{info.version}.exe'
+    dest = _UPDATE_DIR / f'RamWarden-Setup-{info.version}.exe'
     part = dest.with_suffix('.exe.part')
 
     # Don't accumulate a copy of every update ever downloaded.
-    for old in _UPDATE_DIR.glob('RamBo-Setup-*.exe'):
+    for old in _UPDATE_DIR.glob('RamWarden-Setup-*.exe'):
         if old != dest:
             try:
                 old.unlink()
@@ -317,7 +317,7 @@ def run_installer(path):
 
     The caller must quit immediately afterwards: /CLOSEAPPLICATIONS lets Inno
     shut the running app down so it can replace its files, and the new build's
-    [Run] entry relaunches RamBo once the install finishes."""
+    [Run] entry relaunches RamWarden once the install finishes."""
     try:
         subprocess.Popen(
             [str(path), '/SILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL',
