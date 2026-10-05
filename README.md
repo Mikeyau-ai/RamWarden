@@ -41,6 +41,16 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 **Startup tab** — lists `HKCU` / `HKLM` run keys, scheduled tasks, and the user
 and common Startup folders, and enables or disables them.
 
+## Microsoft Store package
+
+```
+python tools/build_msix.py
+```
+
+Builds `dist/RamWarden-<version>.msix` for Partner Center (Store ID 9MTV6BS7W61S). It is unsigned;
+the Store signs it. `makeappx.exe` comes from Microsoft's `Microsoft.Windows.SDK.BuildTools` NuGet
+package unpacked into `tools/_buildtools/`. The Store version leaves updates to the Store.
+
 ## Building from source
 
 Requires Python 3.13+ (the app is built and tested against 3.14).

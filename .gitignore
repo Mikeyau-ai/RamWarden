@@ -16,3 +16,5 @@ credentials.json
 token.json
 .drive_release.json
 github_token.txt
+tools/_buildtools/
+build/msix/
