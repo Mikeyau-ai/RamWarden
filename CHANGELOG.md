@@ -12,6 +12,10 @@ than tags that once existed.
 - **No more gunshots or voice lines.** Closing a process plays a soft short tick, and a refused
   close a muted low thunk; both are plain synthesised tones (`tools/generate_ui_sounds.py`).
   The kill-streak announcer and its streak counting are gone, with the ElevenLabs clips.
+- **When a process can't be closed, RamWarden says why** in plain English, with what to do:
+  already closed; a core Windows process (no app can close it); security software protecting
+  itself; needs administrator (click ADMIN); or protected even for administrators. Refused
+  processes now stay in the list (they used to vanish as if they'd closed).
 - The window no longer shakes when a process closes (a shake reads as "that failed"); the
   closed row's fade-out is the feedback. `tools/preview_killfx.py` (the shake tuner) is gone.
 - **Renamed RamBo -> RamWarden** (the old name is a registered film trademark). Window, installer,

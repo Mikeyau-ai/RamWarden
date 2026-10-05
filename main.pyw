@@ -666,6 +666,41 @@ SYSTEM_NAMES = {
     'wlanext.exe', 'msiexec.exe', 'rundll32.exe', 'regsvr32.exe',
 }
 
+# Why a close can fail, for the explanation RamWarden shows (close_failure_reason).
+# Windows' own core processes: no app may close them, administrator or not.
+CRITICAL_NAMES = {
+    'system', 'registry', 'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe',
+    'services.exe', 'lsass.exe', 'memory compression', 'secure system', 'ntoskrnl.exe',
+    'system interrupts', 'dwm.exe', 'fontdrvhost.exe',
+}
+# Security software that protects itself from being closed ("tamper protection").
+SECURITY_NAMES = {
+    'msmpeng.exe', 'nissrv.exe', 'securityhealthservice.exe', 'securityhealthsystray.exe',
+    'mssense.exe', 'smartscreen.exe', 'avgui.exe', 'avgsvc.exe', 'avastui.exe', 'avastsvc.exe',
+    'mbamservice.exe', 'mbamtray.exe', 'ccsvchst.exe', 'bdagent.exe', 'vsserv.exe',
+    'ekrn.exe', 'egui.exe', 'avp.exe', 'nortonsecurity.exe', 'mcshield.exe',
+}
+CLOSE_FAILURES_SHOWN = 8      # list this many in the dialog, then "and N more"
+
+
+def close_failure_reason(err, name, admin):
+    """A plain-English reason a process couldn't be closed, and what to do about it."""
+    n = (name or '').lower()
+    if isinstance(err, psutil.NoSuchProcess):            # includes ZombieProcess
+        return "It had already closed."
+    if n in CRITICAL_NAMES:
+        return ("It's a core part of Windows. Windows never lets any app close it, "
+                "because the PC would crash.")
+    if n in SECURITY_NAMES:
+        return ("It's security software, which protects itself from being closed. "
+                "Turn it off from its own window or settings if you need to.")
+    if not admin:
+        return ("Windows refused: it's running with administrator rights or belongs to "
+                "Windows. Click ADMIN to restart RamWarden as administrator, then try again.")
+    return ("Windows refused, even as administrator: it's protected (often a driver, an "
+            "anti-cheat or a system service). Close it from its own app, or restart the PC.")
+
+
 ISSUE_ORDER = {
     'Zombie': 0, 'Not Responding': 1, 'Suspended': 2,
     'Dupe · Main': 3, 'Dupe · Child': 4,
@@ -2202,7 +2237,7 @@ class RamWarden(tk.Tk):
         ):
             return
 
-        killed, failed = 0, []
+        killed, failed, closed = 0, [], set()
         for iid in sel:
             try:
                 psutil.Process(int(iid)).kill()
@@ -2210,8 +2245,9 @@ class RamWarden(tk.Tk):
                 # _die drops it when the animation ends.
                 self._start_kill_anim(iid)
                 killed += 1
+                closed.add(int(iid))
             except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-                failed.append(f"PID {iid}: {e}")
+                failed.append((iid, e))
 
         # Audible outcome. A refusal takes priority over the close tick: on a
         # partial kill the refusal is the part worth hearing, and winsound
@@ -2221,7 +2257,8 @@ class RamWarden(tk.Tk):
         elif killed:
             sounds.play_kill()
 
-        killed_pids       = {int(iid) for iid in sel}
+        names             = {str(r['pid']): r['name'] for r in self._all_results}   # before rows drop out
+        killed_pids       = closed | {int(i) for i, e in failed if isinstance(e, psutil.NoSuchProcess)}
         self._all_results = [r for r in self._all_results if r['pid'] not in killed_pids]
 
         shown = len([i for i in self.tree.get_children() if i not in self._dying])
@@ -2232,11 +2269,22 @@ class RamWarden(tk.Tk):
         self.kill_children_btn.config(state=tk.DISABLED)
 
         if failed:
-            messagebox.showwarning(
-                "Partial Success",
-                f"Killed {killed}, failed {len(failed)}:\n" + "\n".join(failed),
-                parent=self
-            )
+            self._report_close_failures(killed, failed, names)
+
+    def _report_close_failures(self, closed, failed, names):
+        """Say which processes couldn't be closed and why, in plain English.
+        `names` maps PID -> process name, taken before the closed rows left the list."""
+        admin = is_admin()
+        lines = [f"•  {names.get(str(iid), 'Unknown')}  (PID {iid})\n    "
+                 f"{close_failure_reason(err, names.get(str(iid)), admin)}"
+                 for iid, err in failed[:CLOSE_FAILURES_SHOWN]]
+        more = len(failed) - CLOSE_FAILURES_SHOWN
+        if more > 0:
+            lines.append(f"…and {more} more.")
+        head = (f"Closed {closed} of {closed + len(failed)}." if closed
+                else f"Couldn't close {'it' if len(failed) == 1 else 'them'}.")
+        messagebox.showwarning("Couldn't close everything" if closed else "Couldn't close",
+                               head + "\n\n" + "\n\n".join(lines), parent=self)
 
     def _kill_children(self):
         if self._need_licence():
@@ -2274,7 +2322,7 @@ class RamWarden(tk.Tk):
         ):
             return
 
-        killed, failed = 0, []
+        killed, failed, closed = 0, [], set()
         for iid in child_iids:
             try:
                 psutil.Process(int(iid)).kill()
@@ -2282,8 +2330,9 @@ class RamWarden(tk.Tk):
                 # _die drops it when the animation ends.
                 self._start_kill_anim(iid)
                 killed += 1
+                closed.add(int(iid))
             except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-                failed.append(f"PID {iid}: {e}")
+                failed.append((iid, e))
 
         # Audible outcome. A refusal takes priority over the close tick: on a
         # partial kill the refusal is the part worth hearing, and winsound
@@ -2293,7 +2342,8 @@ class RamWarden(tk.Tk):
         elif killed:
             sounds.play_kill()
 
-        killed_pids       = {int(iid) for iid in child_iids}
+        names             = {str(r['pid']): r['name'] for r in self._all_results}   # before rows drop out
+        killed_pids       = closed | {int(i) for i, e in failed if isinstance(e, psutil.NoSuchProcess)}
         self._all_results = [r for r in self._all_results if r['pid'] not in killed_pids]
 
         shown = len([i for i in self.tree.get_children() if i not in self._dying])
@@ -2303,11 +2353,7 @@ class RamWarden(tk.Tk):
         self._on_select()
 
         if failed:
-            messagebox.showwarning(
-                "Partial Success",
-                f"Killed {killed}, failed {len(failed)}:\n" + "\n".join(failed),
-                parent=self
-            )
+            self._report_close_failures(killed, failed, names)
 
     def _trim_selected(self):
         if self._need_licence():
