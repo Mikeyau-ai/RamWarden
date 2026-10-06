@@ -1530,24 +1530,25 @@ class RamWarden(tk.Tk):
         frame = tk.Frame(parent, bg=C['bg'], padx=20, pady=12)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("name", "source", "status", "command")
+        cols = ("name", "status", "source", "command")
         self.startup_tree = ttk.Treeview(
             frame, columns=cols, show="headings",
             style="R.Treeview", selectmode="extended")
 
         col_cfg = [
-            ("name",    "NAME",    220, tk.W),
-            ("source",  "SOURCE",   70, tk.CENTER),
-            ("status",  "STATUS",   80, tk.CENTER),
-            ("command", "COMMAND",   0, tk.W),
+            ("name",    "NAME",    280, tk.W),
+            ("status",  "STATUS",   90, tk.CENTER),
+            ("source",  "SOURCE",   80, tk.CENTER),
+            ("command", "LOCATION",  0, tk.W),
         ]
         for cid, heading, width, anchor in col_cfg:
             self.startup_tree.heading(cid, text=heading, anchor=anchor,
                                       command=lambda c=cid: self._startup_sort(c))
             if width:
-                self.startup_tree.column(cid, width=width, minwidth=55, anchor=anchor)
+                # Fixed width: only LOCATION grows with the window, so long paths get the room.
+                self.startup_tree.column(cid, width=width, minwidth=55, anchor=anchor, stretch=False)
             else:
-                # "command" fills remaining space
+                # "command" (shown as LOCATION) fills remaining space
                 self.startup_tree.column(cid, width=300, minwidth=100,
                                          anchor=anchor, stretch=True)
 
@@ -1629,8 +1630,8 @@ class RamWarden(tk.Tk):
             tags = (src_tag, 'disabled') if not entry['enabled'] else (src_tag,)
             values = (
                 entry['name'],
-                entry['source'],
                 'Enabled' if entry['enabled'] else 'Disabled',
+                entry['source'],
                 entry['command'],
             )
             self.startup_tree.insert('', tk.END, iid=str(i), values=values, tags=tags)
@@ -1639,7 +1640,7 @@ class RamWarden(tk.Tk):
         self.status_var.set("Startup scan complete")
 
     def _startup_sort(self, col):
-        col_idx = {"name": 0, "source": 1, "status": 2, "command": 3}[col]
+        col_idx = {"name": 0, "status": 1, "source": 2, "command": 3}[col]
         reverse = (self._startup_sort_col == col) and not self._startup_sort_rev
         items = [(self.startup_tree.set(iid, col), iid)
                  for iid in self.startup_tree.get_children()]
@@ -1650,9 +1651,9 @@ class RamWarden(tk.Tk):
         self._startup_sort_col = col
         self._startup_sort_rev = reverse
         # Update heading arrows
-        for c in ("name", "source", "status", "command"):
+        for c in ("name", "status", "source", "command"):
             heading = {"name": "NAME", "source": "SOURCE",
-                       "status": "STATUS", "command": "COMMAND"}[c]
+                       "status": "STATUS", "command": "LOCATION"}[c]
             arrow = (" ▲" if not reverse else " ▼") if c == col else ""
             self.startup_tree.heading(c, text=heading + arrow,
                                       command=lambda cc=c: self._startup_sort(cc))
