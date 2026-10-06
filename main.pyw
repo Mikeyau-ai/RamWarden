@@ -2471,6 +2471,10 @@ def claim_single_instance():
 
 
 if __name__ == "__main__":
+    if not getattr(sys, 'frozen', False):
+        # Running from source: without its own app ID, Windows files the window under
+        # python.exe and shows Python's taskbar icon. (Built copies are fine as they are.)
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SixthDayStudios.RamWarden")
     setup_crash_log()
     if claim_single_instance():
         app = RamWarden()
