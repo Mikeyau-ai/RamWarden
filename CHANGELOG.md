@@ -20,10 +20,18 @@ than tags that once existed.
   (2.5 s -> 0.2 s). Startup-folder shortcuts are read directly (`lnkfile.py`), no PowerShell.
 - **TRIM RAM trims idle background apps only**: Windows' own processes and anything busy in the
   last scan are left alone (they would page straight back in). TRIM SELECTED is unchanged.
+- **TRIM RAM reports the real result**: how much RAM in use actually dropped across the PC
+  ("RAM in use 21.1 GB -> 20.1 GB (1.0 GB freed)"), matching the RAM meter. It used to add up
+  each app's own drop, which counts memory shared between apps many times over (128 apps once
+  claimed 14.7 GB for a real 1.5 GB). TRIM SELECTED reports the same way.
+- **Startup tab**: scans itself the first time you open it; has its own status line (Live mode's
+  "Scan complete" no longer shows there); columns are NAME, STATUS, SOURCE, LOCATION, with
+  STATUS and SOURCE kept narrow so LOCATION (was COMMAND) gets the room for long paths.
+- The licence and About windows open centred over RamWarden instead of the screen's corner.
 - **Sound on/off** switch in the status bar, remembered.
 - **One copy at a time**: opening RamWarden again brings the open window forward (the ADMIN
   restart still works: the elevated copy waits for the old one to close).
-- **Crash log** for support: `%LOCALAPPDATA%\RamWardenamwarden.log` (About -> OPEN LOG FOLDER).
+- **Crash log** for support: `%LOCALAPPDATA%\RamWarden\ramwarden.log` (About -> OPEN LOG FOLDER).
 - **No more gunshots or voice lines.** Closing a process plays a soft short tick, and a refused
   close a muted low thunk; both are plain synthesised tones (`tools/generate_ui_sounds.py`).
   The kill-streak announcer and its streak counting are gone, with the ElevenLabs clips.
