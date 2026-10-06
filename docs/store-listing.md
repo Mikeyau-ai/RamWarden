@@ -112,13 +112,10 @@ nothing. RamWarden changes only startup entries the user chooses.
 
 ---
 
-## Screenshots (still to do, need Mikey's PC)
-At least 1, ideally 4–5, PNG, 1920×1080 or 1366×768, no personal information visible:
-1. Processes tab after a scan, with a duplicate group and a total showing
-2. A "Not responding" or duplicate row highlighted, with End process ready
-3. Startup tab with a mix of enabled and disabled entries
-4. Trim RAM result in the status bar
-5. The licence window (trial days left)
+## Screenshots (done, brand/screenshots/, 1586×893 PNG)
+1. 1-overview.png: biggest apps first (App total), with the real Trim RAM result in the status bar
+2. 2-app-family.png: Chrome and its 15 extra copies selected, End child processes ready
+3. 3-startup.png: Startup tab with enabled and disabled entries
 
 ## Store logos (ready)
 - brand/icon-1024.png: Store logo (1:1)
