@@ -295,6 +295,14 @@ def load_changelog():
         return "Changelog not available in this build."
 
 
+def centre_over(win, parent, width, height):
+    """Size `win` and place it centred over `parent` (kept on screen)."""
+    parent.update_idletasks()
+    x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2
+    y = parent.winfo_rooty() + (parent.winfo_height() - height) // 2
+    win.geometry(f"{width}x{height}+{max(0, x)}+{max(0, y)}")
+
+
 class AboutWindow(tk.Toplevel):
     """About / changelog window, opened from the wordmark in the topbar.
 
@@ -307,7 +315,7 @@ class AboutWindow(tk.Toplevel):
         super().__init__(app)
         self._app = app
         self.title("About RamWarden")
-        self.geometry("620x640")
+        centre_over(self, app, 620, 640)
         self.minsize(460, 420)
         self.configure(bg=C['bg'])
         self.transient(app)
@@ -476,7 +484,7 @@ class LicenceWindow(tk.Toplevel):
         self._app = app
         self._poll = None                 # the pending "Sign in" request, if any
         self.title("RamWarden licence")
-        self.geometry("540x360")
+        centre_over(self, app, 540, 360)
         self.minsize(460, 330)
         self.configure(bg=C['bg'])
         self.transient(app)
@@ -813,6 +821,7 @@ class RamWarden(tk.Tk):
         self._scanning      = False
         self._trimming          = False
         self._startup_scanning  = False
+        self._startup_opened    = False   # Startup tab scans itself the first time it's opened
         self._startup_results   = []
         self._all_results   = []
         self._cpu           = procsnap.CpuMeter()   # CPU % between consecutive scans
@@ -1501,6 +1510,12 @@ class RamWarden(tk.Tk):
             self._btns_frame.pack(side=tk.RIGHT)
         else:              # Startup (or any future tab)
             self._btns_frame.pack_forget()
+        if not hasattr(self, 'status_lbl'):      # fires once while the window is still being built
+            return
+        self.status_lbl.config(textvariable=self.status_var if tab_idx == 0 else self.startup_status_var)
+        if tab_idx == 1 and not self._startup_opened:
+            self._startup_opened = True
+            self._start_startup_scan()
 
     def _build_startup_tab(self, parent):
         # ── Toolbar ────────────────────────────────────────────────────────────
@@ -1601,7 +1616,7 @@ class RamWarden(tk.Tk):
             return
         self._startup_scanning = True
         self.startup_scan_btn.config(state=tk.DISABLED)
-        self.status_var.set("Scanning startup entries…")
+        self.startup_status_var.set("Scanning startup entries…")
         threading.Thread(target=self._do_startup_scan, daemon=True).start()
 
     def _do_startup_scan(self):
@@ -1614,7 +1629,7 @@ class RamWarden(tk.Tk):
     def _startup_scan_error(self, msg: str):
         self._startup_scanning = False
         self.startup_scan_btn.config(state=tk.NORMAL)
-        self.status_var.set(f"Startup scan failed: {msg}")
+        self.startup_status_var.set(f"Startup scan failed: {msg}")
 
     def _startup_scan_done(self, results):
         self._startup_scanning = False
@@ -1637,7 +1652,7 @@ class RamWarden(tk.Tk):
             self.startup_tree.insert('', tk.END, iid=str(i), values=values, tags=tags)
         self._restripe(self.startup_tree)
         self.startup_summary_lbl.config(text=f"{len(results)} found")
-        self.status_var.set("Startup scan complete")
+        self.startup_status_var.set("Startup scan complete")
 
     def _startup_sort(self, col):
         col_idx = {"name": 0, "status": 1, "source": 2, "command": 3}[col]
@@ -1669,7 +1684,7 @@ class RamWarden(tk.Tk):
             return
         self.startup_disable_btn.config(state=tk.DISABLED)
         self.startup_enable_btn.config(state=tk.DISABLED)
-        self.status_var.set(f"{'Enabling' if enable else 'Disabling'} {len(entries)} item(s)…")
+        self.startup_status_var.set(f"{'Enabling' if enable else 'Disabling'} {len(entries)} item(s)…")
 
         def _worker():
             count = 0
@@ -1689,7 +1704,7 @@ class RamWarden(tk.Tk):
                     "Admin required",
                     f"The following item(s) require administrator privileges to modify:\n\n{names}"
                 )
-            self.status_var.set(f"{'Enabled' if enable else 'Disabled'} {count} item(s)")
+            self.startup_status_var.set(f"{'Enabled' if enable else 'Disabled'} {count} item(s)")
             self._start_startup_scan()
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -1708,6 +1723,9 @@ class RamWarden(tk.Tk):
         bar.pack(fill=tk.X)
 
         self.status_var  = tk.StringVar(value="Ready — press SCAN to begin")
+        # The Startup tab has its own status line, so process-scan messages (e.g. LIVE's
+        # repeated "Scan complete") don't show up there. The label swaps between the two.
+        self.startup_status_var = tk.StringVar(value="")
         self.summary_var = tk.StringVar(value="")
         # Kept as an attribute so _announce_update can tint it teal.
         self.status_lbl = tk.Label(bar, textvariable=self.status_var,
@@ -1748,8 +1766,9 @@ class RamWarden(tk.Tk):
         """An error inside the UI: log it for support instead of losing it (a windowed app has no console)."""
         logging.getLogger("ramwarden").error("Error in the window", exc_info=(exc, val, tb))
         try:
-            self.status_var.set("Something went wrong. It's been noted in the log "
-                                "(About → OPEN LOG FOLDER) if you need support.")
+            for var in (self.status_var, self.startup_status_var):
+                var.set("Something went wrong. It's been noted in the log "
+                        "(About → OPEN LOG FOLDER) if you need support.")
             self.status_lbl.config(fg=C['red'])
         except Exception:
             pass
