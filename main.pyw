@@ -114,8 +114,12 @@ def relaunch_as_admin():
     if getattr(sys, 'frozen', False):
         exe, params = sys.executable, ELEVATED_FLAG
     else:
-        # Running from source: re-run this script under the same interpreter.
+        # Running from source: re-run this script under the same interpreter,
+        # but its windowless twin (pythonw.exe), so no console window opens.
         exe = sys.executable
+        pythonw = os.path.join(os.path.dirname(exe), "pythonw.exe")
+        if os.path.exists(pythonw):
+            exe = pythonw
         params = '"{}" {}'.format(os.path.abspath(__file__), ELEVATED_FLAG)
     try:
         # ShellExecuteW returns >32 on success; <=32 is an error code, and 5
