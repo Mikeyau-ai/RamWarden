@@ -783,6 +783,25 @@ def trim_process(pid: int) -> int:
         _kernel32.CloseHandle(handle)
 
 
+def ram_in_use() -> int:
+    """Bytes of RAM in use across the whole PC (what the RAM meter shows)."""
+    vm = psutil.virtual_memory()
+    return vm.total - vm.available
+
+
+def ram_change_text(before: int) -> str:
+    """How RAM in use moved since `before`. Adding up each app's own drop overstates it
+    (pages shared between apps are counted once per app), so this is the honest figure."""
+    after = ram_in_use()
+    gb = 1024 ** 3
+    freed = before - after
+    if freed < 50 * 1024 ** 2:
+        return "RAM in use barely changed (these apps had little to give back)"
+    return (f"RAM in use {before / gb:.1f} GB → {after / gb:.1f} GB "
+            f"({freed / gb:.1f} GB freed)" if freed >= gb else
+            f"RAM in use {before / gb:.1f} GB → {after / gb:.1f} GB ({freed / 1024 ** 2:.0f} MB freed)")
+
+
 # ── App ────────────────────────────────────────────────────────────────────────
 class RamWarden(tk.Tk):
     def __init__(self):
@@ -2369,10 +2388,10 @@ class RamWarden(tk.Tk):
         sel = self.tree.selection()
         if not sel:
             return
-        freed = sum(trim_process(int(iid)) for iid in sel)
-        freed_mb = freed / 1024 ** 2
-        self.status_var.set(
-            f"Trimmed {len(sel)} process(es) — freed {freed_mb:.1f} MB")
+        before = ram_in_use()
+        for iid in sel:
+            trim_process(int(iid))
+        self.status_var.set(f"Trimmed {len(sel)} app(s) — {ram_change_text(before)}")
         self._update_ram()
 
     def _trim_all(self):
@@ -2392,27 +2411,24 @@ class RamWarden(tk.Tk):
         skip.add(os.getpid())
 
         def _do():
-            freed = 0
+            before = ram_in_use()
             count = 0
             try:
                 pids = [p for p in psutil.pids() if p > 4 and p not in skip]
                 for pid in pids:
-                    result = trim_process(pid)
-                    if result > 0:
-                        freed += result
+                    if trim_process(pid) > 0:
                         count += 1
             finally:
-                self.after(0, lambda: _done(freed, count))
+                self.after(0, lambda: _done(before, count))
 
-        def _done(freed, count):
+        def _done(before, count):
             self._trimming = False
-            freed_mb = freed / 1024 ** 2
             self.trim_all_btn.config(state=tk.NORMAL, text="✂  TRIM RAM")
             has_sel = bool(self.tree.selection())
             self.trim_sel_btn.config(state=tk.NORMAL if has_sel else tk.DISABLED)
             self.status_var.set(
-                f"Trimmed {count} idle app(s) — freed {freed_mb:.1f} MB "
-                f"(Windows' own and busy apps left alone)")
+                f"Trimmed {count} idle app(s) — {ram_change_text(before)}. "
+                f"Windows' own and busy apps left alone.")
             self._update_ram()
 
         threading.Thread(target=_do, daemon=True).start()
