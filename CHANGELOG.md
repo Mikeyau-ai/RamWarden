@@ -9,6 +9,10 @@ ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
 ## Unreleased (licensing; not published yet)
+- **Startup tab: IMPACT column** (High / Medium / Low), worked out the way Task Manager does it,
+  from Windows' own measurements of each app's CPU and disk use at sign-in. Windows only lets
+  administrators read those, so they're read when RamWarden runs as ADMIN and remembered for
+  normal runs. Click one app to see its figures; sort the column to put the worst first.
 - **Scans are ~250x faster**: every process now comes from one Windows call (`procsnap.py`,
   ~10 ms for ~400 processes, was 2.4 s), so Live mode costs next to nothing. Each process is
   identified by PID + start time, so a recycled PID never shows the old process's name.

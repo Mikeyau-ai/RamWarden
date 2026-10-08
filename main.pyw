@@ -24,7 +24,8 @@ try:
 except Exception:
     pass
 
-from startup import scan_startup, set_enabled, StartupAccessError
+from startup import scan_startup, set_enabled, StartupAccessError, exe_of
+import impact
 import updater
 import licence
 import procsnap
@@ -1545,7 +1546,7 @@ class RamWarden(tk.Tk):
         frame = tk.Frame(parent, bg=C['bg'], padx=20, pady=12)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("name", "status", "source", "command")
+        cols = ("name", "status", "impact", "source", "command")
         self.startup_tree = ttk.Treeview(
             frame, columns=cols, show="headings",
             style="R.Treeview", selectmode="extended")
@@ -1553,6 +1554,7 @@ class RamWarden(tk.Tk):
         col_cfg = [
             ("name",    "NAME",    280, tk.W),
             ("status",  "STATUS",   90, tk.CENTER),
+            ("impact",  "IMPACT",  110, tk.CENTER),
             ("source",  "SOURCE",   80, tk.CENTER),
             ("command", "LOCATION",  0, tk.W),
         ]
@@ -1622,6 +1624,10 @@ class RamWarden(tk.Tk):
     def _do_startup_scan(self):
         try:
             results = scan_startup()
+            # Rate each entry from Windows' sign-in measurements (read fresh only as admin).
+            figures, measured_at, fresh = impact.load(is_admin())
+            impact.rate_entries(results, figures, exe_of)
+            self._startup_impact_info = (bool(figures), measured_at, fresh)
             self.after(0, self._startup_scan_done, results)
         except Exception as exc:
             self.after(0, self._startup_scan_error, str(exc))
@@ -1646,28 +1652,42 @@ class RamWarden(tk.Tk):
             values = (
                 entry['name'],
                 'Enabled' if entry['enabled'] else 'Disabled',
+                entry.get('impact', ''),
                 entry['source'],
                 entry['command'],
             )
             self.startup_tree.insert('', tk.END, iid=str(i), values=values, tags=tags)
         self._restripe(self.startup_tree)
         self.startup_summary_lbl.config(text=f"{len(results)} found")
-        self.startup_status_var.set("Startup scan complete")
+        self.startup_status_var.set("Startup scan complete. " + self._startup_impact_note())
+
+    def _startup_impact_note(self) -> str:
+        """Status-line words saying where the IMPACT column's figures came from."""
+        have, measured_at, fresh = getattr(self, '_startup_impact_info', (False, 0, False))
+        if not have:
+            return ("Impact: Windows keeps these figures for administrators, "
+                    "so click ADMIN once to read them." if not is_admin()
+                    else "Impact: Windows hasn't recorded a sign-in yet.")
+        note = f"Impact measured {impact.when_text(measured_at)}"
+        return note + ("." if fresh else " (click ADMIN to update).")
 
     def _startup_sort(self, col):
-        col_idx = {"name": 0, "status": 1, "source": 2, "command": 3}[col]
         reverse = (self._startup_sort_col == col) and not self._startup_sort_rev
         items = [(self.startup_tree.set(iid, col), iid)
                  for iid in self.startup_tree.get_children()]
-        items.sort(key=lambda x: x[0].lower(), reverse=reverse)
+        if col == "impact":
+            # Worst first (High, Medium, Low, …), not alphabetical.
+            items.sort(key=lambda x: impact.RANK.get(x[0], 9), reverse=reverse)
+        else:
+            items.sort(key=lambda x: x[0].lower(), reverse=reverse)
         for rank, (_, iid) in enumerate(items):
             self.startup_tree.move(iid, '', rank)
         self._restripe(self.startup_tree)
         self._startup_sort_col = col
         self._startup_sort_rev = reverse
         # Update heading arrows
-        for c in ("name", "status", "source", "command"):
-            heading = {"name": "NAME", "source": "SOURCE",
+        for c in ("name", "status", "impact", "source", "command"):
+            heading = {"name": "NAME", "source": "SOURCE", "impact": "IMPACT",
                        "status": "STATUS", "command": "LOCATION"}[c]
             arrow = (" ▲" if not reverse else " ▼") if c == col else ""
             self.startup_tree.heading(c, text=heading + arrow,
@@ -1710,10 +1730,15 @@ class RamWarden(tk.Tk):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _on_startup_select(self):
-        n = len(self.startup_tree.selection())
-        state = tk.NORMAL if n > 0 else tk.DISABLED
+        sel = self.startup_tree.selection()
+        state = tk.NORMAL if sel else tk.DISABLED
         self.startup_disable_btn.config(state=state)
         self.startup_enable_btn.config(state=state)
+        # One app picked: show the figures behind its impact rating.
+        if len(sel) == 1 and int(sel[0]) < len(self._startup_results):
+            entry = self._startup_results[int(sel[0])]
+            if entry.get('impact_detail'):
+                self.startup_status_var.set(f"{entry['name']}: {entry['impact']} impact, {entry['impact_detail']}.")
 
     RAM_BAR_W = 132
     RAM_BAR_H = 10

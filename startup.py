@@ -194,20 +194,24 @@ def _scan_tasks() -> list:
     return _parse_tasks_xml(text)
 
 
+def exe_of(command: str) -> str:
+    """The program part of a startup command (quoted or not), '' when there isn't one."""
+    try:
+        raw = command.strip()
+        if raw.startswith('"'):
+            return raw[1:raw.index('"', 1)]
+        return raw.split()[0]
+    except (IndexError, ValueError, AttributeError):
+        return ''
+
+
 def _dedup(entries: list) -> list:
     """Deduplicate by normalised executable path. Priority: Task > HKCU > HKLM."""
     priority = {'Task': 0, 'HKCU': 1, 'Folder': 1, 'HKLM': 2, 'Common': 2}
     seen = {}
     for e in entries:
-        try:
-            raw = e['command'].strip()
-            if raw.startswith('"'):
-                raw = raw[1:raw.index('"', 1)]
-            else:
-                raw = raw.split()[0]
-            exe_key = os.path.normcase(os.path.expandvars(raw))
-        except (IndexError, ValueError, AttributeError):
-            exe_key = e['name'].lower()
+        exe = exe_of(e['command'])
+        exe_key = os.path.normcase(os.path.expandvars(exe)) if exe else e['name'].lower()
         current = seen.get(exe_key)
         if current is None or priority.get(e['source'], 9) < priority.get(current['source'], 9):
             seen[exe_key] = e
