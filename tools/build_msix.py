@@ -17,6 +17,9 @@ Manifest notes:
     otherwise Windows redirects the Startup tab's changes (HKCU Run keys, the Startup folder)
     into a private per-app copy and they'd silently do nothing. Needs a Store justification.
   - allowElevation: the ADMIN button relaunches RamWarden elevated.
+  - App execution alias RamWarden.exe: "Start with Windows" (autostart.py) runs the Store copy
+    through %LOCALAPPDATA%\\Microsoft\\WindowsApps\\RamWarden.exe, since its real path changes
+    with every update.
 """
 import argparse
 import pathlib
@@ -54,6 +57,8 @@ MANIFEST = """<?xml version="1.0" encoding="utf-8"?>
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
          xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+         xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
          IgnorableNamespaces="uap rescap desktop6">
   <Identity Name="{name}" Publisher="{publisher}" Version="{version}" ProcessorArchitecture="x64"/>
   <Properties>
@@ -75,6 +80,13 @@ MANIFEST = """<?xml version="1.0" encoding="utf-8"?>
                           Square150x150Logo="Assets\\Square150x150Logo.png" Square44x44Logo="Assets\\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Assets\\Wide310x150Logo.png"/>
       </uap:VisualElements>
+      <Extensions>
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="RamWarden.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="RamWarden.exe"/>
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+      </Extensions>
     </Application>
   </Applications>
   <Capabilities>

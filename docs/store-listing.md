@@ -48,7 +48,10 @@ First release on the Microsoft Store.
 5. Every startup app in one list (registry, scheduled tasks, Startup folders), with one-click on/off
 6. Explains why a process can't be ended instead of failing silently
 7. Fast and light: scans in a fraction of a second, near-zero CPU while idle
-8. 14-day free trial; full version A$14.95 once off for up to 3 PCs, all updates included
+8. Startup impact (High / Medium / Low) for every startup app, measured by Windows at sign-in
+9. "What is this?": a plain-English explanation of any process and whether it's safe to end
+10. Live RAM % in the tray, with an optional Start with Windows
+11. 14-day free trial; full version A$14.95 once off for up to 3 PCs, all updates included
 
 ## Search terms (up to 7)
 RAM; memory; task manager; process manager; startup apps; speed up PC; not responding

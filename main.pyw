@@ -12,6 +12,7 @@ import math
 import re
 import webbrowser
 import logging
+import queue
 from ctypes import wintypes
 
 # Resolve resource path — works both from source and frozen (PyInstaller)
@@ -27,6 +28,8 @@ except Exception:
 from startup import scan_startup, set_enabled, StartupAccessError, exe_of
 import impact
 import whatis
+import tray
+import autostart
 import updater
 import licence
 import procsnap
@@ -865,6 +868,75 @@ class RamWarden(tk.Tk):
         updated = updater.take_update_notice()
         if updated:
             self.after(400, self._announce_update, updated)
+        # The tray icon: X hides the window to it; started with --tray (at sign-in), the
+        # window stays hidden until the icon is clicked.
+        self.protocol("WM_DELETE_WINDOW", self._close_window)
+        self._start_tray()
+        if self.tray and autostart.TRAY_FLAG in sys.argv:
+            self.withdraw()
+
+    # ── Tray ───────────────────────────────────────────────────────────────────
+    def _start_tray(self):
+        """Show the RAM % in the tray. Without it (it failed), closing the window just quits."""
+        try:
+            self.tray = tray.Tray()
+        except Exception:
+            logging.getLogger("ramwarden").exception("Tray icon unavailable")
+            self.tray = None
+            return
+        self.tray.autostart_checked = autostart.is_enabled()
+        self._tray_tick()
+        self._tray_poll()
+
+    def _tray_tick(self):
+        """Refresh the tray's figure and hover text every 2 seconds."""
+        mem = psutil.virtual_memory()
+        self.tray.update(mem.percent, f"RamWarden: RAM {mem.percent:.0f}% in use "
+                                      f"({mem.used / 1024 ** 3:.1f} of {mem.total / 1024 ** 3:.1f} GB)")
+        self.after(2000, self._tray_tick)
+
+    def _tray_poll(self):
+        """Act on tray clicks and menu choices, which arrive from the tray's own thread."""
+        try:
+            while True:
+                event = self.tray.events.get_nowait()
+                if event == 'open':
+                    self._show_window()
+                elif event == 'autostart':
+                    self._toggle_autostart()
+                elif event == 'exit':
+                    self.destroy()
+                    return
+        except queue.Empty:
+            pass
+        self.after(150, self._tray_poll)
+
+    def _show_window(self):
+        """Bring the window back from the tray (or from minimised) and to the front."""
+        if self.state() in ('withdrawn', 'iconic'):
+            self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    def _close_window(self):
+        """The X button: hide to the tray (explained once), or quit if there's no tray icon."""
+        if not self.tray:
+            self.destroy()
+            return
+        self.withdraw()
+        if not updater._load_settings().get('tray_note_shown'):
+            updater._save_setting('tray_note_shown', True)
+            self.tray.notify("RamWarden is still running",
+                             "It's in the tray showing your RAM use. Click the icon to open it, "
+                             "or right-click it to exit or start it with Windows.")
+
+    def _toggle_autostart(self):
+        """The tray menu's "Start with Windows" switch."""
+        try:
+            autostart.set_enabled(not autostart.is_enabled())
+        except OSError as exc:
+            messagebox.showwarning("Start with Windows", f"Windows refused the change: {exc}", parent=self)
+        self.tray.autostart_checked = autostart.is_enabled()
 
     # ── UI ─────────────────────────────────────────────────────────────────────
     def _init_style(self):
@@ -2550,6 +2622,8 @@ def claim_single_instance():
         if time.monotonic() >= deadline:
             break
         time.sleep(0.25)
+    if tray.show_running_copy():                        # it may be hidden in the tray
+        return False
     hwnd = _user32.FindWindowW(None, "RamWarden")
     if hwnd:
         _user32.ShowWindow(hwnd, 9)                     # SW_RESTORE (un-minimise)
@@ -2566,3 +2640,5 @@ if __name__ == "__main__":
     if claim_single_instance():
         app = RamWarden()
         app.mainloop()
+        if app.tray:
+            app.tray.stop()                             # take the icon out of the tray

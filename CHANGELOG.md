@@ -9,6 +9,13 @@ ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
 ## Unreleased (licensing; not published yet)
+- **Tray icon with live RAM %**: a small tile in the notification area showing how full RAM is
+  (teal, amber from 60 %, red from 85 %), with the details on hover. Closing the window now hides
+  RamWarden to the tray (said once); right-click the icon to Exit. Opening RamWarden again brings
+  the hidden window back.
+- **Start with Windows** (tray menu, off unless you turn it on): starts RamWarden hidden in the
+  tray at sign-in, without administrator rights. The Store package gains a `RamWarden.exe` app
+  alias for this.
 - **What is this?** Right-click a process (or double-click it) for a plain-English line about
   what it is and whether it's safe to end. About 80 common Windows and app processes have a
   written explanation; anything else is described from its own file details (description and
