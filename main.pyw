@@ -26,6 +26,7 @@ except Exception:
 
 from startup import scan_startup, set_enabled, StartupAccessError, exe_of
 import impact
+import whatis
 import updater
 import licence
 import procsnap
@@ -1363,6 +1364,7 @@ class RamWarden(tk.Tk):
         self.tree.bind("<Motion>",           self._on_hover)
         self.tree.bind("<Leave>",            self._on_hover_leave)
         self.tree.bind("<Button-3>",         self._on_right_click)
+        self.tree.bind("<Double-Button-1>",  self._on_double_click)
         for seq in ("<Control-a>", "<Control-A>"):
             self.tree.bind(seq, self._select_all)
         for seq in ("<Control-c>", "<Control-C>"):
@@ -1372,6 +1374,8 @@ class RamWarden(tk.Tk):
                              activebackground=C['select'],
                              activeforeground='#ffffff',
                              bd=0, relief=tk.FLAT, font=FONT_UI)
+        self._menu.add_command(label="What is this?", command=self._what_is)
+        self._menu.add_separator()
         self._menu.add_command(label="Open file location",
                                command=self._open_location)
         self._menu.add_command(label="Copy PID", command=self._copy_pid)
@@ -2214,6 +2218,7 @@ class RamWarden(tk.Tk):
             self._on_select()
         # Single-row actions only make sense for one row.
         single = tk.NORMAL if len(self.tree.selection()) == 1 else tk.DISABLED
+        self._menu.entryconfig("What is this?", state=single)
         self._menu.entryconfig("Open file location", state=single)
         self._menu.entryconfig("Copy PID", state=single)
         try:
@@ -2238,6 +2243,27 @@ class RamWarden(tk.Tk):
         self.clipboard_append("\n".join(rows))
         self.status_var.set(f"Copied {len(rows)} row(s) to clipboard")
         return "break"
+
+    def _on_double_click(self, event):
+        """Double-clicking a row explains that process."""
+        iid = self.tree.identify_row(event.y)
+        if iid:
+            self.tree.selection_set([iid])
+            self._on_select()
+            self._what_is()
+        return "break"
+
+    def _what_is(self):
+        """Explain the selected process in plain English, and whether it's safe to end."""
+        sel = self.tree.selection()
+        if len(sel) != 1:
+            return
+        name = self.tree.set(sel[0], "process")
+        try:
+            path = psutil.Process(int(sel[0])).exe()
+        except (psutil.Error, ValueError):
+            path = ''          # gone, or protected without admin: explain from the name alone
+        messagebox.showinfo(f"What is {name}?", whatis.as_text(name, whatis.explain(name, path)), parent=self)
 
     def _copy_pid(self):
         sel = self.tree.selection()

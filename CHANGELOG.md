@@ -9,6 +9,10 @@ ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
 ## Unreleased (licensing; not published yet)
+- **What is this?** Right-click a process (or double-click it) for a plain-English line about
+  what it is and whether it's safe to end. About 80 common Windows and app processes have a
+  written explanation; anything else is described from its own file details (description and
+  publisher) and where it lives.
 - **Startup tab: IMPACT column** (High / Medium / Low), worked out the way Task Manager does it,
   from Windows' own measurements of each app's CPU and disk use at sign-in. Windows only lets
   administrators read those, so they're read when RamWarden runs as ADMIN and remembered for
