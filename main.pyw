@@ -1743,6 +1743,9 @@ class RamWarden(tk.Tk):
     def _startup_impact_note(self) -> str:
         """Status-line words saying where the IMPACT column's figures came from."""
         have, measured_at, fresh = getattr(self, '_startup_impact_info', (False, 0, False))
+        if not have and measured_at:
+            return (f"Impact: Windows stopped recording startup figures {impact.when_text(measured_at)} "
+                    "(Windows 11 24H2 and later don't), so there's nothing current to show.")
         if not have:
             return ("Impact: Windows keeps these figures for administrators, "
                     "so click ADMIN once to read them." if not is_admin()

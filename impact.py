@@ -29,6 +29,10 @@ _GENERIC_HOSTS = {'rundll32.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'wscr
                   'svchost.exe', 'dllhost.exe', 'regsvr32.exe', 'javaw.exe', 'java.exe',
                   'python.exe', 'pythonw.exe', 'node.exe'}
 
+# Figures older than this are ignored: Windows 11 24H2 and later stopped recording them, and a
+# rating from years ago says little about the apps installed now.
+STALE_DAYS = 60
+
 # Display order for sorting: worst first.
 RANK = {'High': 0, 'Medium': 1, 'Low': 2, 'Not measured': 3, 'None': 4, '': 5}
 
@@ -69,6 +73,9 @@ def parse_startup_info(raw: bytes) -> dict:
     text = _xml_text(raw)
     # ElementTree refuses a str that still declares encoding="UTF-16".
     text = re.sub(r'^\s*<\?xml[^>]*\?>', '', text)
+    # Windows writes program names unescaped, so "Spybot - Search & Destroy" makes the whole
+    # file invalid XML. Escape any & that doesn't start a real entity.
+    text = re.sub(r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)', '&amp;', text)
     root = ET.fromstring(text)
     result = {}
     for p in root.iter('Process'):
@@ -90,13 +97,17 @@ def _int(text) -> int:
         return 0
 
 
-def read_latest(folder: str = STARTUP_INFO_DIR, sid: str = None) -> tuple:
+def read_latest(folder: str = None, sid: str = None) -> tuple:
     """(figures, measured_at) from this user's newest StartupInfo file.
     Raises PermissionError when not running as administrator; ({}, 0) when there are none."""
+    folder = folder or STARTUP_INFO_DIR
     sid = _current_sid() if sid is None else sid
     names = [n for n in os.listdir(folder)            # PermissionError without admin rights
              if re.search(r'StartupInfo\d*\.xml$', n, re.I) and (not sid or n.upper().startswith(sid.upper() + '_'))]
     if not names:
+        import logging
+        logging.getLogger("ramwarden").info("Startup impact: no StartupInfo file for %s among %s",
+                                            sid or 'any user', os.listdir(folder)[:10])
         return {}, 0
     newest = max(names, key=lambda n: os.path.getmtime(os.path.join(folder, n)))
     path = os.path.join(folder, newest)
@@ -115,8 +126,15 @@ def load(admin: bool, cache_path=None) -> tuple:
     the ones kept from the last admin run. fresh is False when they came from the cache."""
     cache_path = cache_path or _cache_path()
     if admin:
+        import logging
+        log = logging.getLogger("ramwarden")
         try:
             figures, when = read_latest()
+            log.info("Startup impact: %d programs in Windows' sign-in figures", len(figures))
+            if figures and time.time() - when > STALE_DAYS * 86400:
+                # Windows 11 24H2 and later stopped writing these, leaving the last ones behind.
+                log.info("Startup impact: Windows' figures are from %s, too old to use", time.ctime(when))
+                return {}, when, True
             if figures:
                 try:
                     cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -126,7 +144,7 @@ def load(admin: bool, cache_path=None) -> tuple:
                     pass
                 return figures, when, True
         except (OSError, ET.ParseError):
-            pass
+            log.warning("Startup impact: couldn't read %s", STARTUP_INFO_DIR, exc_info=True)
     try:
         data = json.loads(cache_path.read_text(encoding='utf-8'))
         return {k: tuple(v) for k, v in data['figures'].items()}, int(data['measured_at']), False
@@ -175,4 +193,5 @@ def when_text(measured_at: int) -> str:
     t = time.localtime(measured_at)
     hour = t.tm_hour % 12 or 12
     ampm = 'am' if t.tm_hour < 12 else 'pm'
-    return f"at sign-in on {t.tm_mday} {time.strftime('%b', t)}, {hour}:{t.tm_min:02d} {ampm}"
+    year = f" {t.tm_year}" if t.tm_year != time.localtime().tm_year else ""
+    return f"at sign-in on {t.tm_mday} {time.strftime('%b', t)}{year}, {hour}:{t.tm_min:02d} {ampm}"

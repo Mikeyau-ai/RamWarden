@@ -47,6 +47,29 @@ def test_parse_adds_copies_of_the_same_program():
     assert figs[r"C:\Apps\Tiny\tiny.exe"] == (1_000, 2_000)
 
 
+def test_parse_survives_windows_unescaped_ampersands():
+    # Windows really writes this (seen on a live PC): a bare & that makes the file invalid XML.
+    raw = sample_file(process(r"C:\Program Files (x86)\Spybot - Search & Destroy 2\SDTray.exe", 5, 6),
+                      process(r"C:\a&amp;b.exe", 1, 2))
+    figs = impact.parse_startup_info(raw)
+    assert figs[r"C:\Program Files (x86)\Spybot - Search & Destroy 2\SDTray.exe"] == (5, 6)
+    assert figs[r"C:\a&b.exe"] == (1, 2)
+
+
+def test_old_figures_are_ignored_but_their_date_kept():
+    import os, time, unittest.mock as mock
+    with tempfile.TemporaryDirectory() as d:
+        f = pathlib.Path(d) / f"{SID}_StartupInfo1.xml"
+        f.write_bytes(sample_file(process(r"C:\a.exe", 1, 1)))
+        old = time.time() - 700 * 86400
+        os.utime(f, (old, old))
+        cache = pathlib.Path(d) / "cache.json"
+        with mock.patch.object(impact, "STARTUP_INFO_DIR", d), mock.patch.object(impact, "_current_sid", lambda: SID):
+            assert impact.load(True, cache) == ({}, int(old), True)
+        assert not cache.exists()                                  # stale figures aren't kept
+        assert str(time.localtime(old).tm_year) in impact.when_text(int(old))
+
+
 def test_read_latest_picks_this_users_newest_file():
     with tempfile.TemporaryDirectory() as d:
         folder = pathlib.Path(d)
