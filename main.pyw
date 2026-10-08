@@ -1655,6 +1655,7 @@ class RamWarden(tk.Tk):
         self.startup_tree.tag_configure("src_task",    foreground=C['orange'])
         self.startup_tree.tag_configure("src_folder",  foreground=C['blue'])
         self.startup_tree.tag_configure("src_common",  foreground=C['yellow'])
+        self.startup_tree.tag_configure("src_store",   foreground=C['purple'])
         # disabled tag overrides source colour
         self.startup_tree.tag_configure("disabled", foreground=C['dim'])
 
@@ -1723,11 +1724,13 @@ class RamWarden(tk.Tk):
             src_tag = {
                 'HKCU': 'src_hkcu', 'HKLM': 'src_hklm',
                 'Task': 'src_task', 'Folder': 'src_folder', 'Common': 'src_common',
+                'Store': 'src_store',
             }.get(src, 'src_hkcu')
             tags = (src_tag, 'disabled') if not entry['enabled'] else (src_tag,)
             values = (
                 entry['name'],
-                'Enabled' if entry['enabled'] else 'Disabled',
+                # "Missing": its program is gone, so it does nothing (click it for more).
+                'Missing' if entry.get('missing') else 'Enabled' if entry['enabled'] else 'Disabled',
                 entry.get('impact', ''),
                 entry['source'],
                 entry['command'],
@@ -1810,10 +1813,16 @@ class RamWarden(tk.Tk):
         state = tk.NORMAL if sel else tk.DISABLED
         self.startup_disable_btn.config(state=state)
         self.startup_enable_btn.config(state=state)
-        # One app picked: show the figures behind its impact rating.
+        # One entry picked: say what's notable about it.
         if len(sel) == 1 and int(sel[0]) < len(self._startup_results):
             entry = self._startup_results[int(sel[0])]
-            if entry.get('impact_detail'):
+            if entry.get('missing'):
+                self.startup_status_var.set(
+                    f"{entry['name']}: its program isn't there (probably uninstalled, or on a drive "
+                    "that isn't connected), so it does nothing at sign-in. Safe to disable.")
+            elif entry.get('policy'):
+                self.startup_status_var.set(f"{entry['name']}: set by your organisation's policy, so it can't be changed here.")
+            elif entry.get('impact_detail'):
                 self.startup_status_var.set(f"{entry['name']}: {entry['impact']} impact, {entry['impact_detail']}.")
 
     RAM_BAR_W = 132

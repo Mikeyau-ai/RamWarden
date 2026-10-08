@@ -9,6 +9,13 @@ ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
 ## Unreleased (licensing; not published yet)
+- **Startup tab finds more**: Store apps' startup switches (Teams, Phone Link, Windows Terminal…,
+  the ones Task Manager shows), and third-party scheduled tasks that run at sign-in or start-up
+  whatever account runs them. Windows' own maintenance tasks are no longer listed.
+- **Fixed: unquoted program paths with spaces** ("C:\Program Files\…\app.exe /s") were read as
+  "C:\Program", which hid entries (they were merged as duplicates) and broke impact matching.
+- **Missing** status for startup entries whose program is gone (uninstalled, or on a drive that
+  isn't connected); click one for an explanation.
 - **Tray icon with live RAM %**: a small tile in the notification area showing how full RAM is
   (teal, amber from 60 %, red from 85 %), with the details on hover. Closing the window now hides
   RamWarden to the tray (said once); right-click the icon to Exit. Opening RamWarden again brings
