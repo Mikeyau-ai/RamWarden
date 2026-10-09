@@ -56,7 +56,7 @@ def test_parse_survives_windows_unescaped_ampersands():
     assert figs[r"C:\a&b.exe"] == (1, 2)
 
 
-def test_old_figures_are_ignored_but_their_date_kept():
+def test_old_windows_figures_are_ignored():
     import os, time, unittest.mock as mock
     with tempfile.TemporaryDirectory() as d:
         f = pathlib.Path(d) / f"{SID}_StartupInfo1.xml"
@@ -65,7 +65,7 @@ def test_old_figures_are_ignored_but_their_date_kept():
         os.utime(f, (old, old))
         cache = pathlib.Path(d) / "cache.json"
         with mock.patch.object(impact, "STARTUP_INFO_DIR", d), mock.patch.object(impact, "_current_sid", lambda: SID):
-            assert impact.load(True, cache) == ({}, int(old), True)
+            assert impact.load(True, cache) == ({}, 0)
         assert not cache.exists()                                  # stale figures aren't kept
         assert str(time.localtime(old).tm_year) in impact.when_text(int(old))
 
@@ -101,7 +101,7 @@ def test_rate_entries_matches_by_path_then_unique_name():
     ]
     impact.rate_entries(entries, figs, exe_of)
     assert [e['impact'] for e in entries] == ['High', 'Low', 'Not measured', 'None', 'Not measured']
-    assert entries[0]['impact_detail'] == "1.5 s CPU, 0.0 MB disk at sign-in"
+    assert entries[0]['impact_detail'] == "1.5 s CPU, 0.0 MB read or written in the first 90 s"
 
 
 def test_no_figures_leaves_the_column_blank():
@@ -110,12 +110,66 @@ def test_no_figures_leaves_the_column_blank():
     assert entries[0]['impact'] == ''
 
 
-def test_load_uses_the_kept_figures_when_not_admin():
+def test_load_returns_the_kept_figures():
     with tempfile.TemporaryDirectory() as d:
         cache = pathlib.Path(d) / "startup_impact.json"
-        assert impact.load(False, cache) == ({}, 0, False)
-        cache.write_text('{"measured_at": 1760000000, "figures": {"C:\\\\a.exe": [5, 6]}}', encoding='utf-8')
-        assert impact.load(False, cache) == ({r"C:\a.exe": (5, 6)}, 1760000000, False)
+        assert impact.load(False, cache) == ({}, 0)
+        impact.save({"a.exe": (5, 6)}, 1760000000, cache)
+        assert impact.load(False, cache) == ({"a.exe": (5, 6)}, 1760000000)
+
+
+class P:
+    """A fake procsnap.Proc."""
+    def __init__(self, pid, name, created, cpu, io, session=1, ppid=0):
+        self.pid, self.name, self.created, self.ppid = pid, name, created, ppid
+        self.cpu_time, self.io_bytes, self.session = cpu, io, session
+        self.key = (pid, created)
+
+
+def test_measure_signin_keeps_programs_that_quit_and_ignores_the_rest():
+    t0 = 1_000_000.0
+    clock = {'now': t0 + 20}                     # RamWarden starts 20 s after sign-in
+    snaps = [
+        # At 20 s: the desktop, a launcher about to quit, a chat app, a service, an old process.
+        [P(1, 'explorer.exe', t0, 0.5, 0), P(2, 'Update.exe', t0 + 8, 0.2, 100_000),
+         P(3, 'Discord.exe', t0 + 9, 0.4, 1_000_000, ppid=2), P(4, 'svc.exe', t0 + 5, 9.0, 0, session=0),
+         P(5, 'old.exe', t0 - 600, 50.0, 0)],
+        # Later: the launcher has quit; Discord kept working; a second Discord copy started.
+        [P(1, 'explorer.exe', t0, 0.6, 0), P(3, 'Discord.exe', t0 + 9, 1.1, 4_000_000, ppid=2),
+         P(6, 'Discord.exe', t0 + 30, 0.3, 0, ppid=3)],
+    ]
+    calls = []
+
+    def snapshot():
+        calls.append(1)
+        return snaps[min(len(calls), len(snaps)) - 1]
+
+    def sleep(seconds):
+        clock['now'] += seconds
+
+    figs, when = impact.measure_signin(snapshot, now=lambda: clock['now'], sleep=sleep, session=1)
+    assert when == int(t0)
+    assert figs['discord.exe'] == (1_400_000, 4_000_000)       # both copies, latest figures
+    # The launcher quit, so it's kept, with the Discord it started credited to it.
+    assert figs['update.exe'] == (200_000 + 1_100_000, 100_000 + 4_000_000)
+    assert figs['explorer.exe'] == (600_000, 0)                # still running: nothing credited
+    assert 'svc.exe' not in figs and 'old.exe' not in figs     # another session; started long before
+    assert clock['now'] >= t0 + impact.WINDOW_S                # watched until 90 s after sign-in
+
+
+def test_measure_signin_skips_a_late_start():
+    t0 = 1_000_000.0
+    snap = lambda: [P(1, 'explorer.exe', t0, 1, 0)]
+    assert impact.measure_signin(snap, now=lambda: t0 + 3600, sleep=lambda s: None, session=1) == ({}, 0)
+
+
+def test_unseen_launcher_falls_back_to_the_app_it_names():
+    figs = {'discord.exe': (1_400_000, 0), 'avgui.exe': (500_000, 0)}      # launchers quit unseen
+    e = [{'name': 'Discord', 'enabled': True,
+          'command': r'"C:\Users\x\AppData\Local\Discord\Update.exe" --processStart Discord.exe'},
+         {'name': 'AVGUI.exe', 'enabled': True, 'command': r'"C:\Program Files\AVG\Antivirus\AvLaunch.exe" /gui'}]
+    impact.rate_entries(e, figs, exe_of)
+    assert [x['impact'] for x in e] == ['High', 'Medium']
 
 
 if __name__ == "__main__":

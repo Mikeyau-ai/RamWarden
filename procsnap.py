@@ -36,15 +36,19 @@ _buf_size = 1 << 20      # grows to fit and is remembered, so later calls need o
 
 class Proc:
     """One process from a snapshot."""
-    __slots__ = ("pid", "ppid", "name", "created", "memory", "cpu_time", "threads", "status")
+    __slots__ = ("pid", "ppid", "name", "created", "memory", "cpu_time", "threads", "status",
+                 "session", "io_bytes")
 
-    def __init__(self, pid, ppid, name, created, memory, cpu_time, threads, status):
+    def __init__(self, pid, ppid, name, created, memory, cpu_time, threads, status,
+                 session=0, io_bytes=0):
         self.pid, self.ppid, self.name = pid, ppid, name
         self.created = created        # unix seconds
         self.memory = memory          # private working set: Task Manager's "Memory" column
         self.cpu_time = cpu_time      # user + kernel, seconds
         self.threads = threads
         self.status = status          # RUNNING | STOPPED (every thread suspended) | ZOMBIE (no threads left)
+        self.session = session        # sign-in session (0 = Windows services)
+        self.io_bytes = io_bytes      # bytes read + written since it started
 
     @property
     def key(self):
@@ -79,6 +83,8 @@ def snapshot():
         (created, user, kernel) = struct.unpack_from("<qqq", raw, offset + 32)
         (name_len, _name_max, name_ptr) = struct.unpack_from("<HH4xQ", raw, offset + 56)
         (pid, ppid) = struct.unpack_from("<QQ", raw, offset + 80)
+        (session,) = struct.unpack_from("<I", raw, offset + 100)
+        (read_bytes, write_bytes) = struct.unpack_from("<qq", raw, offset + 232)   # Read/WriteTransferCount
         if pid:
             if name_ptr:
                 # The name lives inside our own buffer; read it there rather than via the pointer.
@@ -95,7 +101,8 @@ def snapshot():
                 t += _THREAD_SIZE
             status = ZOMBIE if n_threads == 0 else (STOPPED if suspended == n_threads else RUNNING)
             born = (created - _EPOCH_AS_FILETIME) / 1e7 if created else 0.0
-            out.append(Proc(pid, ppid, name, born, private_ws, (user + kernel) / 1e7, n_threads, status))
+            out.append(Proc(pid, ppid, name, born, private_ws, (user + kernel) / 1e7, n_threads, status,
+                            session, read_bytes + write_bytes))
         if not next_off:
             return out
         offset += next_off

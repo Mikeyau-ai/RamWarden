@@ -874,6 +874,25 @@ class RamWarden(tk.Tk):
         self._start_tray()
         if self.tray and autostart.TRAY_FLAG in sys.argv:
             self.withdraw()
+        # Started with Windows: measure the apps starting alongside (the IMPACT column).
+        if autostart.TRAY_FLAG in sys.argv:
+            threading.Thread(target=self._measure_signin, daemon=True).start()
+
+    def _measure_signin(self):
+        """Worker thread: watch the first 90 s after sign-in and keep the figures for IMPACT."""
+        log = logging.getLogger("ramwarden")
+        try:
+            figures, signed_in = impact.measure_signin()
+        except Exception:
+            log.exception("Startup impact: measuring the sign-in failed")
+            return
+        if not figures:
+            log.info("Startup impact: started too long after sign-in to measure it")
+            return
+        impact.save(figures, signed_in)
+        log.info("Startup impact: measured %d programs at sign-in", len(figures))
+        if self._startup_opened:                 # already looking at the Startup tab: refresh it
+            self.after(0, self._start_startup_scan)
 
     # ── Tray ───────────────────────────────────────────────────────────────────
     def _start_tray(self):
@@ -932,11 +951,21 @@ class RamWarden(tk.Tk):
 
     def _toggle_autostart(self):
         """The tray menu's "Start with Windows" switch."""
+        self._set_autostart(not autostart.is_enabled())
+
+    def _set_autostart(self, on):
+        """Turn "Start with Windows" on or off, keeping the tray tick and the Startup tab's
+        tick box in step (it also decides whether startup impact gets measured)."""
         try:
-            autostart.set_enabled(not autostart.is_enabled())
+            autostart.set_enabled(on)
         except OSError as exc:
             messagebox.showwarning("Start with Windows", f"Windows refused the change: {exc}", parent=self)
-        self.tray.autostart_checked = autostart.is_enabled()
+        on = autostart.is_enabled()
+        if self.tray:
+            self.tray.autostart_checked = on
+        self.autostart_var.set(on)
+        if self._startup_results:
+            self.startup_status_var.set(self._startup_impact_note())
 
     # ── UI ─────────────────────────────────────────────────────────────────────
     def _init_style(self):
@@ -1613,6 +1642,16 @@ class RamWarden(tk.Tk):
             lambda: self._set_startup_enabled(True), C['blue'], state=tk.DISABLED)
         self.startup_enable_btn.pack(side=tk.LEFT, padx=(0, 6))
 
+        # "Start with Windows": RamWarden starts in the tray at sign-in and measures the
+        # IMPACT column's figures while the other startup apps load.
+        self.autostart_var = tk.BooleanVar(value=autostart.is_enabled())
+        tk.Checkbutton(
+            toolbar, text="Start with Windows (measures startup impact)",
+            variable=self.autostart_var, command=lambda: self._set_autostart(self.autostart_var.get()),
+            font=FONT_UI, bg=C['panel'], fg=C['text'], activebackground=C['panel'],
+            activeforeground=C['teal'], selectcolor=C['bg'], highlightthickness=0, bd=0,
+            cursor="hand2").pack(side=tk.LEFT, padx=(18, 0))
+
         self.startup_summary_lbl = tk.Label(
             toolbar, text="", font=FONT_UI,
             bg=C['panel'], fg=C['dim'])
@@ -1701,10 +1740,10 @@ class RamWarden(tk.Tk):
     def _do_startup_scan(self):
         try:
             results = scan_startup()
-            # Rate each entry from Windows' sign-in measurements (read fresh only as admin).
-            figures, measured_at, fresh = impact.load(is_admin())
+            # Rate each entry from the last sign-in's measurements.
+            figures, measured_at = impact.load(is_admin())
             impact.rate_entries(results, figures, exe_of)
-            self._startup_impact_info = (bool(figures), measured_at, fresh)
+            self._startup_impact_info = (bool(figures), measured_at)
             self.after(0, self._startup_scan_done, results)
         except Exception as exc:
             self.after(0, self._startup_scan_error, str(exc))
@@ -1742,16 +1781,14 @@ class RamWarden(tk.Tk):
 
     def _startup_impact_note(self) -> str:
         """Status-line words saying where the IMPACT column's figures came from."""
-        have, measured_at, fresh = getattr(self, '_startup_impact_info', (False, 0, False))
-        if not have and measured_at:
-            return (f"Impact: Windows stopped recording startup figures {impact.when_text(measured_at)} "
-                    "(Windows 11 24H2 and later don't), so there's nothing current to show.")
-        if not have:
-            return ("Impact: Windows keeps these figures for administrators, "
-                    "so click ADMIN once to read them." if not is_admin()
-                    else "Impact: Windows hasn't recorded a sign-in yet.")
-        note = f"Impact measured {impact.when_text(measured_at)}"
-        return note + ("." if fresh else " (click ADMIN to update).")
+        have, measured_at = getattr(self, '_startup_impact_info', (False, 0))
+        on = autostart.is_enabled()
+        if have:
+            note = f"Impact measured {impact.when_text(measured_at)}."
+            return note if on else note + " Tick Start with Windows to keep it up to date."
+        if on:
+            return "Impact will be measured the next time you sign in to Windows."
+        return "Tick Start with Windows and RamWarden measures each app's impact at your next sign-in."
 
     def _startup_sort(self, col):
         reverse = (self._startup_sort_col == col) and not self._startup_sort_rev

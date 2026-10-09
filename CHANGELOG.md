@@ -20,17 +20,19 @@ than tags that once existed.
   (teal, amber from 60 %, red from 85 %), with the details on hover. Closing the window now hides
   RamWarden to the tray (said once); right-click the icon to Exit. Opening RamWarden again brings
   the hidden window back.
-- **Start with Windows** (tray menu, off unless you turn it on): starts RamWarden hidden in the
-  tray at sign-in, without administrator rights. The Store package gains a `RamWarden.exe` app
-  alias for this.
+- **Start with Windows** (tick box on the Startup tab, or the tray menu; off unless you turn it
+  on): starts RamWarden hidden in the tray at sign-in, without administrator rights, and measures
+  startup impact while it's there. The Store package gains a `RamWarden.exe` app alias for this.
 - **What is this?** Right-click a process (or double-click it) for a plain-English line about
   what it is and whether it's safe to end. About 80 common Windows and app processes have a
   written explanation; anything else is described from its own file details (description and
   publisher) and where it lives.
-- **Startup tab: IMPACT column** (High / Medium / Low), worked out the way Task Manager does it,
-  from Windows' own measurements of each app's CPU and disk use at sign-in. Windows only lets
-  administrators read those, so they're read when RamWarden runs as ADMIN and remembered for
-  normal runs. Click one app to see its figures; sort the column to put the worst first.
+- **Startup tab: IMPACT column** (High / Medium / Low), rated the way Task Manager did: each
+  app's CPU time and data read/written in the first 90 s after sign-in. Windows 11 24H2 and later
+  no longer record these, so RamWarden measures them itself when it starts with Windows: it
+  needn't start first (every process keeps its own running totals), checks every 2 s to catch
+  launchers that start the real app and quit (their app's figures count for them), and works
+  without administrator rights. Click one app to see its figures; sort to put the worst first.
 - **Scans are ~250x faster**: every process now comes from one Windows call (`procsnap.py`,
   ~10 ms for ~400 processes, was 2.4 s), so Live mode costs next to nothing. Each process is
   identified by PID + start time, so a recycled PID never shows the old process's name.
