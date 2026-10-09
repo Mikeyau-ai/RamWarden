@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to RamBo. Newest first. Bump `APP_VERSION` in `main.pyw`
+All notable changes to RamWarden (RamBo before 1.6.0). Newest first. Bump `APP_VERSION` in `main.pyw`
 and add an entry here for every release.
 
 Versions below 1.0.0 are reconstructed from the commit history and the design
@@ -8,7 +8,7 @@ docs in `docs/superpowers/`. They were never cut as numbered builds — the alph
 ran straight from source — so the numbers are a reading of that history rather
 than tags that once existed.
 
-## Unreleased (licensing; not published yet)
+## 1.6.0
 - **Startup tab finds more**: Store apps' startup switches (Teams, Phone Link, Windows Terminal…,
   the ones Task Manager shows), and third-party scheduled tasks that run at sign-in or start-up
   whatever account runs them. Windows' own maintenance tasks are no longer listed.
@@ -82,7 +82,7 @@ than tags that once existed.
 - Distributed through the Microsoft Store (MSIX, signed by Microsoft). The Store version
   turns the GitHub self-updater off (`updater.is_store_install()`); the Store delivers updates.
 - The licence window states the price (A$14.95 one-off, up to 3 PCs, all updates included)
-  and BUY opens sixthdaystudios.com/rambo.
+  and BUY opens sixthdaystudios.com/ramwarden.
 - New `licence.py` and a stdlib-only `ed25519.py` (licences are signed by the website and
   verified here). Tests: `python tools/test_licence.py`.
 

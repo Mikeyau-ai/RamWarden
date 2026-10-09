@@ -20,6 +20,7 @@ Requires the GitHub CLI, authenticated once:
     gh auth login
 """
 import os
+import shutil
 import subprocess
 import sys
 
@@ -89,14 +90,25 @@ def changelog(tag):
     return "\n".join('- ' + l for l in lines[:15]) or '- Maintenance release.'
 
 
+def patch_notes(tag):
+    """Hand-written notes from docs/release-notes/<tag>.md when there are some (one short line
+    per bullet: the in-app update prompt shows the first 12 lines), else the commit subjects."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs', 'release-notes', f'{tag}.md')
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as fh:
+            return fh.read().strip()
+    return changelog(tag)
+
+
 def build_notes(tag):
-    """Release body: changelog first, then the standing install boilerplate.
+    """Release body: patch notes first, then the standing install boilerplate.
 
     The `---` rule matters — updater.note_lines() stops there, so the in-app
     update prompt shows what changed rather than install instructions the
     user has already followed."""
     return (
-        f"## What's new\n\n{changelog(tag)}\n\n"
+        f"## What's new\n\n{patch_notes(tag)}\n\n"
+        f"Full details: [CHANGELOG.md](https://github.com/{GITHUB_REPO}/blob/main/CHANGELOG.md)\n\n"
         "---\n\n"
         "Download `RamWarden-Setup.exe` and run it. It installs for the current "
         "user only, so there is no admin prompt, and it adds a Start Menu "
@@ -160,7 +172,11 @@ def main():
         print(f"  No {SETUP_PATH} — run build_installer.py first.")
         return 1
     print(f"  {os.path.getsize(SETUP_PATH) / 1024 ** 2:.1f} MB -> {SETUP_PATH}")
-    return 0 if publish(tag, [SETUP_PATH]) else 1
+    # Installs from before the rename (RamBo 1.5.1 and earlier) update by downloading an asset
+    # named RamBo-Setup.exe, so the same installer is attached under that name too.
+    legacy = os.path.join(os.path.dirname(SETUP_PATH), 'RamBo-Setup.exe')
+    shutil.copyfile(SETUP_PATH, legacy)
+    return 0 if publish(tag, [SETUP_PATH, legacy]) else 1
 
 
 if __name__ == '__main__':

@@ -33,6 +33,9 @@ PrivilegesRequired=lowest
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+; An upgrade from RamBo would otherwise keep its "RamBo" Start Menu folder. (The install folder
+; is kept as it was: renaming it would strand the old copy.)
+UsePreviousGroup=no
 
 ; The app is 64-bit (PyInstaller builds against the 64-bit interpreter).
 ArchitecturesAllowed=x64compatible
@@ -69,6 +72,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; The entire one-dir bundle: RamWarden.exe plus _internal\ (python3xx.dll, the
 ; stdlib zip, psutil, Tcl/Tk, and the bundled icon/logo).
 Source: "dist\{#AppName}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+; Upgrading from RamBo (1.5.1 and earlier): its program and shortcuts would be left behind,
+; pointing at an exe that no longer matches the files beside it.
+Type: files; Name: "{app}\RamBo.exe"
+Type: files; Name: "{autodesktop}\RamBo.lnk"
+Type: filesandordirs; Name: "{autoprograms}\RamBo"
 
 [Icons]
 ; A real Start Menu folder, so the uninstaller is reachable from there and not
